@@ -110,8 +110,16 @@ class CompareTestCase(unittest.TestCase):
         actual = load_json('compare/actual.json')
         expected = load_json('compare/expected.json')
 
-        diff = Compare(self.config, rules).check(expected, actual)
-        self.assertEqual(diff, NO_DIFF)
+        result = Compare(self.config, rules).calculate_score(expected, actual)
+
+        # print('')
+        # print(f'failed {result.failed} of {result.count}')
+        # print('similarity', result.similarity)
+        # print('diff', result.diff)
+
+        self.assertEqual(result.diff, NO_DIFF)
+        self.assertEqual(result.failed, 0)
+        self.assertEqual(result.similarity, 1.0)
 
     def test_simple_list_with_dicts(self):
         expected = [

@@ -37,6 +37,54 @@ DEFAULT_CONFIG = {
     },
 }
 
+class Result:
+
+    __slots__ = ("_failed", "_count", "_diff")
+
+    def __init__(self, expected, diff):
+        self._diff = diff
+        self._count = self._count_attributes_deep(expected)
+        self._failed = self._count_failed(diff)
+
+    def _count_attributes_deep(self, o):
+        # Count the number of attributes in an object or list including nested objects and lists
+        if isinstance(o, dict):
+            return sum(self._count_attributes_deep(v) for v in o.values())
+        elif isinstance(o, list):
+            return sum(self._count_attributes_deep(v) for v in o)
+        else:
+            return 1
+
+    def _count_failed(self, d):
+        if self._is_problem(d):
+            return 1
+        else:
+            return sum(self._count_failed(v) for v in d.values())
+
+    def _is_problem(self, d):
+        for k, v in d.items():
+            if isinstance(v, dict):
+                return False
+        return d != NO_DIFF
+
+    @property
+    def failed(self):
+        return self._failed
+
+    @property
+    def count(self):
+        return self._count
+
+    @property
+    def similarity(self):
+        if self._count == 0:
+            return 0
+        return (self._count - self._failed) / self._count
+
+    @property
+    def diff(self):
+        return self._diff
+
 
 class Compare:
 
@@ -61,6 +109,10 @@ class Compare:
         diff = self._diff(e, a)
         self.report(diff)
         return diff
+
+    def calculate_score(self, expected, actual):
+        diff = self.check(expected, actual)
+        return Result(expected, diff)
 
     def _diff(self, e, a):
         t = type(e)
