@@ -8,10 +8,12 @@
 
 This package is designed to compare two objects with a JSON-like structure and data types.
 
+Forked from https://github.com/rugleb/JsonCompare and extended with a custom score calculation.
+
 ### Install
 
 ```
-pip install -U pip jsoncomparison
+pip install git+https://github.com/ivopisarovic/JsonCompare
 ```
 
 ### Usage
