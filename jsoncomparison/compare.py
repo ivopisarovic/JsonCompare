@@ -217,7 +217,8 @@ class Compare:
     def _list_diff(self, e, a, weight, weights):
         d = {}
         if self._need_compare_length():
-            d['_length'] = self._list_len_diff(e, a, weight)
+            length_weight = self._get_weight(weights, '_length')
+            d['_length'] = self._list_len_diff(e, a, weight * length_weight)
         d['_content'] = self._list_content_diff(e, a)
         return self._without_empties(d)
 

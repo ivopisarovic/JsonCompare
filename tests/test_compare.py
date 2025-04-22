@@ -206,6 +206,12 @@ class CompareTestCase(unittest.TestCase):
                     'attr': 2,
                 }
             },
+            'list': {
+                '_length': 0.3,
+                '_content': {
+                    # TODO
+                }
+            },
         })
 
         result = compare.calculate_score(e, e)
@@ -222,7 +228,7 @@ class CompareTestCase(unittest.TestCase):
                     },
                 },
                 'list': {
-                    '_length': LengthsNotEqual(3, 1, 2).explain(),
+                    '_length': LengthsNotEqual(3, 1, 2 * 0.3).explain(),
                     '_content': {
                         1: ValueNotFound(4, None).explain(),
                         2: ValueNotFound(6, None).explain(),
@@ -231,7 +237,7 @@ class CompareTestCase(unittest.TestCase):
                 'bool': KeyNotExist('bool', None).explain(),
             },
         )
-        self.assertEqual(36, result.failed_weighted)
+        self.assertEqual(34.6, result.failed_weighted)
 
 
 if __name__ == '__main__':
