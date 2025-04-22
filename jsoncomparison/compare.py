@@ -219,7 +219,7 @@ class Compare:
         if self._need_compare_length():
             length_weight = self._get_weight(weights, '_length')
             d['_length'] = self._list_len_diff(e, a, weight * length_weight)
-        d['_content'] = self._list_content_diff(e, a)
+        d['_content'] = self._list_content_diff(e, a, weight, weights)
         return self._without_empties(d)
 
     def _need_compare_length(self):
@@ -230,38 +230,44 @@ class Compare:
         path = 'types.list.list_length_influences_weight'
         return self._config.get(path) is True
 
-    def _list_content_diff(self, e, a):
+    def _list_content_diff(self, e, a, weight, weights):
         d = {}
+        items_weights = weights.get('_list', {})
+
         for i, v in enumerate(e):
             if v in a:
                 continue
+
+            i_weight = self._get_weight(items_weights, i) * weight
             t = type(v)
+
             if t in (int, str, bool, float):
-                d[i] = ValueNotFound(v, None).explain()
+                w = 0 if self._need_compare_length() else i_weight
+                d[i] = ValueNotFound(v, None, w).explain()
             elif t is dict:
-                d[i] = self._min_diff(v, a, self._dict_diff)
+                d[i] = self._min_diff(v, a, self._dict_diff, i_weight, items_weights)
             elif t is list:
-                d[i] = self._max_diff(v, a, self._list_diff)
+                d[i] = self._max_diff(v, a, self._list_diff, i_weight, items_weights)
         return self._without_empties(d)
 
     @classmethod
-    def _max_diff(cls, e, lst, method):
+    def _max_diff(cls, e, lst, method, weight, weights):
         t = type(e)
-        d = method(e, t())
+        d = method(e, t(), weight, weights)
         for i, v in enumerate(lst):
             if type(v) is t:
-                dd = method(e, v)
+                dd = method(e, v, weight, weights)
                 if len(dd) <= len(d):
                     d = dd
         return d
 
     @classmethod
-    def _min_diff(cls, e, lst, method):
+    def _min_diff(cls, e, lst, method, weight, weights):
         t = type(e)
-        d = method(e, t())
+        d = method(e, t(), weight, weights)
         for i, v in enumerate(lst):
             if type(v) is t:
-                dd = method(e, v)
+                dd = method(e, v, weight, weights)
                 if len(dd) <= len(d):
                     d = dd
                     break

@@ -54,9 +54,6 @@ class LengthsNotEqual(Error):
 class ValueNotFound(Error):
     template = 'Value not found. Expected <{e}>'
 
-    def __init__(self, expected, received):
-        super().__init__(expected, received, 0)
-
 
 class UnexpectedKey(Error):
     template = 'Unexpected key. Received: <{r}>'

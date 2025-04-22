@@ -192,11 +192,16 @@ class CompareTestCase(unittest.TestCase):
         e = {'int': 1, 'str': {
             'not_nested': 'aloha',
             'nested': { 'attr': 'Hi' }
-        }, 'list': [1.23, 4, 6], 'bool': True}
+        }, 'list': [
+            {'a': 1, 'b': 2},
+            {'a': 3, 'b': 4},
+        ], 'bool': True}
         a = {'int': 2, 'str': {
             'not_nested': 'guten tag',
             'nested': { 'attr': 'Hi2' }
-        }, 'list': [1.23]}
+        }, 'list': [
+            {'a': 1, 'b': 2},
+        ]}
 
         compare = Compare(self.config, weights={
             'int': 3,
@@ -208,8 +213,8 @@ class CompareTestCase(unittest.TestCase):
             },
             'list': {
                 '_length': 0.3,
-                '_content': {
-                    # TODO
+                '_list': {
+                    'a': 5
                 }
             },
         })
@@ -228,16 +233,18 @@ class CompareTestCase(unittest.TestCase):
                     },
                 },
                 'list': {
-                    '_length': LengthsNotEqual(3, 1, 2 * 0.3).explain(),
+                    '_length': LengthsNotEqual(2, 1, 1 * 0.3).explain(),
                     '_content': {
-                        1: ValueNotFound(4, None).explain(),
-                        2: ValueNotFound(6, None).explain(),
+                        1: {
+                            'a': ValuesNotEqual(3, 1, 5).explain(),
+                            'b': ValuesNotEqual(4, 2, 1).explain(),
+                        }
                     },
                 },
                 'bool': KeyNotExist('bool', None).explain(),
             },
         )
-        self.assertEqual(34.6, result.failed_weighted)
+        self.assertEqual(40.3, result.failed_weighted)
 
 
 if __name__ == '__main__':
