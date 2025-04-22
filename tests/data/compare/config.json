@@ -4,7 +4,8 @@
             "allow_round": 2
         },
         "list": {
-            "check_length": true
+            "check_length": true,
+            "list_length_influences_weight": true
         }
     },
     "output": {

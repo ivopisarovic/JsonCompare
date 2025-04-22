@@ -49,12 +49,6 @@ class KeyNotExist(Error):
 
 class LengthsNotEqual(Error):
     template = 'Lengths not equal. Expected <{e}>, received: <{r}>'
-    diff = None
-
-    def __init__(self, expected_length, received_length, weight=1):
-        self.diff = abs(expected_length - received_length)
-        list_weight = weight * self.diff
-        super().__init__(expected_length, received_length, list_weight)
 
 
 class ValueNotFound(Error):

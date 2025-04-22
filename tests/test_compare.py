@@ -222,7 +222,7 @@ class CompareTestCase(unittest.TestCase):
                     },
                 },
                 'list': {
-                    '_length': LengthsNotEqual(3, 1).explain(),
+                    '_length': LengthsNotEqual(3, 1, 2).explain(),
                     '_content': {
                         1: ValueNotFound(4, None).explain(),
                         2: ValueNotFound(6, None).explain(),

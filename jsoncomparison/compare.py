@@ -217,12 +217,16 @@ class Compare:
     def _list_diff(self, e, a, weight, weights):
         d = {}
         if self._need_compare_length():
-            d['_length'] = self._list_len_diff(e, a)
+            d['_length'] = self._list_len_diff(e, a, weight)
         d['_content'] = self._list_content_diff(e, a)
         return self._without_empties(d)
 
     def _need_compare_length(self):
         path = 'types.list.check_length'
+        return self._config.get(path) is True
+
+    def _list_length_influences_weight(self, e, a):
+        path = 'types.list.list_length_influences_weight'
         return self._config.get(path) is True
 
     def _list_content_diff(self, e, a):
@@ -262,12 +266,19 @@ class Compare:
                     break
         return d
 
-    @classmethod
-    def _list_len_diff(cls, e, a):
+    def _list_len_diff(self, e, a, weight):
         e, a = len(e), len(a)
+
         if e == a:
             return NO_DIFF
-        return LengthsNotEqual(e, a).explain()
+
+        if self._list_length_influences_weight(e, a):
+            length_diff = abs(e - a)
+            list_weight = weight * length_diff
+        else:
+            list_weight = weight
+
+        return LengthsNotEqual(e, a, list_weight).explain()
 
     @classmethod
     def _without_empties(cls, d):
