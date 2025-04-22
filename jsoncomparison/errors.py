@@ -4,12 +4,14 @@ from abc import ABC
 class Error(ABC):
     expected = None
     received = None
+    type = None  # New attribute to indicate the error type
 
     template = 'Expected: <{e}>, received: <{r}>'
 
     def __init__(self, expected, received):
         self.expected = expected
         self.received = received
+        self.type = self.__class__.__name__  # Set the type to the subclass name
 
     @property
     def message(self):
@@ -21,6 +23,7 @@ class Error(ABC):
             '_message': self.message,
             '_expected': self.expected,
             '_received': self.received,
+            '_error': self.type,  # Include the type in the explanation
         }
 
 
