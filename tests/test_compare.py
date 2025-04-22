@@ -188,6 +188,51 @@ class CompareTestCase(unittest.TestCase):
             },
         )
 
+    def test_weights(self):
+        e = {'int': 1, 'str': {
+            'not_nested': 'aloha',
+            'nested': { 'attr': 'Hi' }
+        }, 'list': [1.23, 4, 6], 'bool': True}
+        a = {'int': 2, 'str': {
+            'not_nested': 'guten tag',
+            'nested': { 'attr': 'Hi2' }
+        }, 'list': [1.23]}
+
+        compare = Compare(self.config, weights={
+            'int': 3,
+            'str': {
+                '_weight': 10,
+                'nested': {
+                    'attr': 2,
+                }
+            },
+        })
+
+        result = compare.calculate_score(e, e)
+        self.assertEqual(result.diff, NO_DIFF)
+
+        result = compare.calculate_score(e, a)
+        self.assertEqual(
+            result.diff, {
+                'int': ValuesNotEqual(1, 2, 3).explain(),
+                'str': {
+                    'not_nested': ValuesNotEqual('aloha', 'guten tag', 10).explain(),
+                    'nested': {
+                        'attr': ValuesNotEqual('Hi', 'Hi2', 20).explain(),
+                    },
+                },
+                'list': {
+                    '_length': LengthsNotEqual(3, 1).explain(),
+                    '_content': {
+                        1: ValueNotFound(4, None).explain(),
+                        2: ValueNotFound(6, None).explain(),
+                    },
+                },
+                'bool': KeyNotExist('bool', None).explain(),
+            },
+        )
+        self.assertEqual(36, result.failed_weighted)
+
 
 if __name__ == '__main__':
     unittest.main()

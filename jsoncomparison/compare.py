@@ -15,6 +15,7 @@ from .ignore import Ignore
 
 NO_DIFF: dict = {}
 NO_RULES: dict = {}
+NO_WEIGHTS: dict = {}
 
 DEFAULT_CONFIG = {
     'output': {
@@ -39,12 +40,13 @@ DEFAULT_CONFIG = {
 
 class Result:
 
-    __slots__ = ("_failed", "_count", "_diff")
+    __slots__ = ("_failed", "_failed_weighted", "_count", "_diff")
 
     def __init__(self, expected, diff):
         self._diff = diff
         self._count = self._count_attributes_deep(expected)
-        self._failed = self._count_failed(diff)
+        self._failed = self._count_failed(diff, False)
+        self._failed_weighted = self._count_failed(diff, True)
 
     def _count_attributes_deep(self, o):
         # Count the number of attributes in an object or list including nested objects and lists
@@ -55,11 +57,14 @@ class Result:
         else:
             return 1
 
-    def _count_failed(self, d):
+    def _count_failed(self, d, weighted):
         if self._is_problem(d):
-            return 1
+            if weighted and '_weight' in d:
+                return d['_weight']
+            else:
+                return 1
         else:
-            return sum(self._count_failed(v) for v in d.values())
+            return sum(self._count_failed(v, weighted) for v in d.values())
 
     def _is_problem(self, d):
         for k, v in d.items():
@@ -70,6 +75,10 @@ class Result:
     @property
     def failed(self):
         return self._failed
+
+    @property
+    def failed_weighted(self):
+        return self._failed_weighted
 
     @property
     def count(self):
@@ -88,25 +97,29 @@ class Result:
 
 class Compare:
 
-    __slots__ = ("_config", "_rules")
+    __slots__ = ("_config", "_rules", "_weights")
 
     def __init__(
         self,
         config: Optional[dict] = None,
         rules: Optional[dict] = None,
+        weights: Optional[dict] = None,
     ):
         if not config:
             config = DEFAULT_CONFIG
         if not rules:
             rules = NO_RULES
+        if not weights:
+            weights = NO_WEIGHTS
 
         self._config = Config(config)
         self._rules = rules
+        self._weights = weights
 
     def check(self, expected, actual):
         e = self.prepare(expected)
         a = self.prepare(actual)
-        diff = self._diff(e, a)
+        diff = self._diff(e, a, 1, self._weights)
         self.report(diff)
         return diff
 
@@ -114,43 +127,56 @@ class Compare:
         diff = self.check(expected, actual)
         return Result(expected, diff)
 
-    def _diff(self, e, a):
+    @staticmethod
+    def _get_weight(weights, key):
+        if key in weights:
+            if isinstance(weights[key], dict):
+                return weights[key]['_weight'] if '_weight' in weights[key] else 1
+            elif isinstance(weights[key], (int, float)):
+                return weights[key]
+            else:
+                raise TypeError(
+                    f"Invalid weight type for key '{key}': {type(weights[key])}"
+                )
+        return 1
+
+    def _diff(self, e, a, weight, weights):
         t = type(e)
         if not isinstance(a, t):
-            return TypesNotEqual(e, a).explain()
+            return TypesNotEqual(e, a, weight).explain()
         if t is int:
-            return self._int_diff(e, a)
+            return self._int_diff(e, a, weight)
         if t is str:
-            return self._str_diff(e, a)
+            return self._str_diff(e, a, weight)
         if t is bool:
-            return self._bool_diff(e, a)
+            return self._bool_diff(e, a, weight)
         if t is float:
-            return self._float_diff(e, a)
+            return self._float_diff(e, a, weight)
         if t is dict:
-            return self._dict_diff(e, a)
+            return self._dict_diff(e, a, weight, weights)
         if t is list:
-            return self._list_diff(e, a)
+            return self._list_diff(e, a, weight, weights)
         return NO_DIFF
 
     @classmethod
-    def _int_diff(cls, e, a):
+    def _int_diff(cls, e, a, weight):
         if a == e:
             return NO_DIFF
-        return ValuesNotEqual(e, a).explain()
+        return ValuesNotEqual(e, a, weight).explain()
 
     @classmethod
-    def _bool_diff(cls, e, a):
+    def _bool_diff(cls, e, a, weight):
         if a is e:
             return NO_DIFF
-        return ValuesNotEqual(e, a).explain()
+        return ValuesNotEqual(e, a, weight).explain()
 
     @classmethod
-    def _str_diff(cls, e, a):
+    def _str_diff(cls, e, a, weight):
         if a == e:
             return NO_DIFF
-        return ValuesNotEqual(e, a).explain()
+        return ValuesNotEqual(e, a, weight).explain()
 
-    def _float_diff(self, e, a):
+    def _float_diff(self, e, a, weight):
         if a == e:
             return NO_DIFF
         if self._can_rounded_float():
@@ -158,7 +184,7 @@ class Compare:
             e, a = round(e, p), round(a, p)
             if a == e:
                 return NO_DIFF
-        return ValuesNotEqual(e, a).explain()
+        return ValuesNotEqual(e, a, weight).explain()
 
     def _can_rounded_float(self):
         p = self._float_precision()
@@ -168,23 +194,27 @@ class Compare:
         path = 'types.float.allow_round'
         return self._config.get(path)
 
-    def _dict_diff(self, e, a):
+    def _dict_diff(self, e, a, weight, weights):
         d = {}
         for k in e:
+            k_weight = self._get_weight(weights, k) * weight
             if k not in a:
-                d[k] = KeyNotExist(k, None).explain()
+                d[k] = KeyNotExist(k, None, k_weight).explain()
             else:
-                d[k] = self._diff(e[k], a[k])
+                nested_weights = weights.get(k, {})
+                d[k] = self._diff(e[k], a[k], k_weight, nested_weights)
 
         for k in a:
+            k_weight = self._get_weight(weights, k) * weight
             if k not in e:
-                d[k] = UnexpectedKey(None, k).explain()
+                d[k] = UnexpectedKey(None, k, k_weight).explain()
             else:
-                d[k] = self._diff(e[k], a[k])
+                nested_weights = weights.get(k, {})
+                d[k] = self._diff(e[k], a[k], k_weight, nested_weights)
 
         return self._without_empties(d)
 
-    def _list_diff(self, e, a):
+    def _list_diff(self, e, a, weight, weights):
         d = {}
         if self._need_compare_length():
             d['_length'] = self._list_len_diff(e, a)
