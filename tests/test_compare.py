@@ -92,8 +92,8 @@ class CompareTestCase(unittest.TestCase):
             diff, {
                 '_length': LengthsNotEqual(len(e), len(a)).explain(),
                 '_content': {
-                    1: ValueNotFound(2, None).explain(),
-                    3: ValueNotFound(True, None).explain(),
+                    1: ValueNotFound(2, None, 0).explain(),
+                    3: ValueNotFound(True, None, 0).explain(),
                 },
             },
         )

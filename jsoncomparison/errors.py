@@ -33,7 +33,7 @@ class Error(ABC):
 class TypesNotEqual(Error):
     template = 'Types not equal. Expected: <{e}>, received: <{r}>'
 
-    def __init__(self, e, a, weight):
+    def __init__(self, e, a, weight=1):
         e = type(e).__name__
         a = type(a).__name__
         super().__init__(e, a, weight)
