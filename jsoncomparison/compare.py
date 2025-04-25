@@ -1,6 +1,8 @@
 import copy
 import json
 from typing import Optional
+import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 from .config import Config
 from .errors import (
@@ -9,7 +11,7 @@ from .errors import (
     TypesNotEqual,
     UnexpectedKey,
     ValueNotFound,
-    ValuesNotEqual,
+    ValuesNotEqual, MissingListItem, ExtraListItem,
 )
 from .ignore import Ignore
 
@@ -67,10 +69,9 @@ class Result:
             return sum(self._count_failed(v, weighted) for v in d.values())
 
     def _is_problem(self, d):
-        for k, v in d.items():
-            if isinstance(v, dict):
-                return False
-        return d != NO_DIFF
+        if isinstance(d, dict) and '_error' in d:
+            return True
+        return False
 
     @property
     def failed(self):
@@ -88,7 +89,7 @@ class Result:
     def similarity(self):
         if self._count == 0:
             return 0
-        return (self._count - self._failed) / self._count
+        return (self._count - self._failed_weighted) / self._count
 
     @property
     def diff(self):
@@ -158,6 +159,10 @@ class Compare:
             return self._list_diff(e, a, weight, weights)
         return NO_DIFF
 
+    def _calculate_similarity(self, e, a, weight, weights):
+        diff = self._diff(e, a, weight, weights)
+        return Result(e, diff).similarity
+
     @classmethod
     def _int_diff(cls, e, a, weight):
         if a == e:
@@ -219,7 +224,7 @@ class Compare:
         if self._need_compare_length():
             length_weight = self._get_weight(weights, '_length')
             d['_length'] = self._list_len_diff(e, a, weight * length_weight)
-        d['_content'] = self._list_content_diff(e, a, weight, weights)
+        d['_content'] = self._list_content_diff_new(e, a, weight, weights)
         return self._without_empties(d)
 
     def _need_compare_length(self):
@@ -229,6 +234,53 @@ class Compare:
     def _list_length_influences_weight(self, e, a):
         path = 'types.list.list_length_influences_weight'
         return self._config.get(path) is True
+
+    def _list_content_diff_new(self, e, a, weight, weights):
+        # Prepare the score matrix for matrix in size len(e) x len(a)
+        score_matrix = np.zeros((len(e), len(a)))
+
+        # Calculate score for each pair of elements
+        for i, v in enumerate(e):
+            for j, w in enumerate(a):
+                if type(v) is type(w):
+                    similarity = self._calculate_similarity(v, w, weight, weights)
+                    score_matrix[i, j] = similarity
+
+        # Hungarian algorithm optimizes the cost, so we need to convert scores to costs.
+        # The cost is calculated as the maximum score minus the score.
+        cost_matrix = score_matrix.max() - score_matrix
+
+        # Using Hungarian algorithm (solving the minimization problem)
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
+
+        # Pairing (debug print)
+        # print("Pairing:")
+        # for v, w in zip(row_ind, col_ind):
+        #     print(f"A{v+1} -> B{w+1} (score: {score_matrix[v, w]})")
+
+        # # Final pairing score (debug print)
+        # total_score = score_matrix[row_ind, col_ind].sum()
+        # print(f"Final score: {total_score}")
+
+        result = {}
+
+        # After pairing, we need to find the elements that were not matched
+        # and add them to the result
+        for i in range(len(e)):
+            if i not in row_ind:
+                result[i] = MissingListItem(e[i], None, 1).explain()
+
+        for j in range(len(a)):
+            if j not in col_ind:
+                result[j] = ExtraListItem(None, a[j], 1).explain()
+
+        # Now we need to check the elements that were matched
+        for i, j in zip(row_ind, col_ind):
+            diff = self._diff(e[i], a[j], weight, weights)
+            if diff != NO_DIFF:
+                result[i] = diff
+
+        return result
 
     def _list_content_diff(self, e, a, weight, weights):
         d = {}

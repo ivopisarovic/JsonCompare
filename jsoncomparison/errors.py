@@ -57,3 +57,11 @@ class ValueNotFound(Error):
 
 class UnexpectedKey(Error):
     template = 'Unexpected key. Received: <{r}>'
+
+
+class MissingListItem(Error):
+    template = 'Missing list item. Expected <{e}>'
+
+
+class ExtraListItem(Error):
+    template = 'Extra list item. Received <{r}>'

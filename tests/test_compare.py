@@ -1,4 +1,5 @@
 import unittest
+import json
 
 from jsoncomparison import (
     NO_DIFF,
@@ -9,7 +10,7 @@ from jsoncomparison import (
     ValueNotFound,
     ValuesNotEqual,
 )
-from jsoncomparison.errors import UnexpectedKey
+from jsoncomparison.errors import UnexpectedKey, MissingListItem, ExtraListItem
 
 from . import load_json
 
@@ -22,49 +23,50 @@ class CompareTestCase(unittest.TestCase):
 
     def test_compare_int(self):
         diff = self.compare.check(1, 1)
-        self.assertEqual(diff, NO_DIFF)
+        self.assertEqual(NO_DIFF, diff)
 
         diff = self.compare.check(1, 2)
-        self.assertEqual(diff, ValuesNotEqual(1, 2).explain())
+        self.assertEqual(ValuesNotEqual(1, 2).explain(), diff)
 
     def test_compare_str(self):
         diff = self.compare.check('str', 'str')
-        self.assertEqual(diff, NO_DIFF)
+        self.assertEqual(NO_DIFF, diff)
 
         diff = self.compare.check('str1', 'str2')
-        self.assertEqual(diff, ValuesNotEqual('str1', 'str2').explain())
+        self.assertEqual(ValuesNotEqual('str1', 'str2').explain(), diff)
 
     def test_compare_float(self):
         diff = self.compare.check(1.2, 1.2)
-        self.assertEqual(diff, NO_DIFF)
+        self.assertEqual(NO_DIFF, diff)
 
         diff = self.compare.check(1.23456, 1.23)
-        self.assertEqual(diff, NO_DIFF)
+        self.assertEqual(NO_DIFF, diff)
 
         diff = self.compare.check(1.2, 1.3)
-        self.assertEqual(diff, ValuesNotEqual(1.2, 1.3).explain())
+        self.assertEqual(ValuesNotEqual(1.2, 1.3).explain(), diff)
 
     def test_compare_bool(self):
         diff = self.compare.check(True, True)
-        self.assertEqual(diff, NO_DIFF)
+        self.assertEqual(NO_DIFF, diff)
 
         diff = self.compare.check(True, False)
-        self.assertEqual(diff, ValuesNotEqual(True, False).explain())
+        self.assertEqual(ValuesNotEqual(True, False).explain(), diff)
 
     def test_compare_dict_diff(self):
         e = {'int': 1, 'str': 'Hi', 'float': 1.23, 'bool': True}
         a = {'int': 2, 'str': 'Hi', 'float': 1}
 
         diff = self.compare.check(e, e)
-        self.assertEqual(diff, NO_DIFF)
+        self.assertEqual(NO_DIFF, diff)
 
         diff = self.compare.check(e, a)
         self.assertEqual(
-            diff, {
+            {
                 'int': ValuesNotEqual(1, 2).explain(),
                 'float': TypesNotEqual(1.23, 1).explain(),
                 'bool': KeyNotExist('bool', None).explain(),
             },
+            diff,
         )
 
     def test_compare_dict_diff_unexpected(self):
@@ -73,11 +75,12 @@ class CompareTestCase(unittest.TestCase):
 
         diff = self.compare.check(e, a)
         self.assertEqual(
-            diff, {
+            {
                 'int': ValuesNotEqual(2, 1).explain(),
                 'float': TypesNotEqual(1, 1.23).explain(),
                 'bool': UnexpectedKey(None, 'bool').explain(),
             },
+            diff,
         )
 
     def test_list_compare(self):
@@ -89,13 +92,56 @@ class CompareTestCase(unittest.TestCase):
 
         diff = self.compare.check(e, a)
         self.assertEqual(
-            diff, {
+            {
                 '_length': LengthsNotEqual(len(e), len(a)).explain(),
                 '_content': {
-                    1: ValueNotFound(2, None, 0).explain(),
-                    3: ValueNotFound(True, None, 0).explain(),
+                    1: ValuesNotEqual(2, 3, 1).explain(),
+                    3: ValuesNotEqual(True, False, 1).explain(),
+                    4: ExtraListItem(None, None, 1).explain(),
                 },
             },
+            diff,
+        )
+
+    def test_depp_list_compare(self):
+        # Test with nested lists
+        # Items should be matched correctly using Hungarian algorithm
+
+        e = [
+            {'key': 1, 'value': 2},
+            {'key': 2, 'value': 3},
+            {'key': 3, 'value': 4},
+        ]
+        a = [
+            {'key': 1, 'value': 2},
+            {'key': 3, 'value': 4},
+            {'key': 2, 'value': 3},
+            {'key': 4, 'value': 5},
+        ]
+
+        diff = self.compare.check(e, e)
+        self.assertEqual(diff, NO_DIFF)
+
+        diff = self.compare.check(e, a)
+        self.assertEqual(
+            {
+                '_length': LengthsNotEqual(len(e), len(a)).explain(),
+                '_content': {
+                    3: ExtraListItem(None, {'key': 4, 'value': 5}).explain(),
+                },
+            },
+            diff
+        )
+
+        diff = self.compare.check(a, e)
+        self.assertEqual(
+            {
+                '_length': LengthsNotEqual(len(a), len(e)).explain(),
+                '_content': {
+                    3: MissingListItem({'key': 4, 'value': 5}, None).explain(),
+                },
+            },
+            diff
         )
 
     def test_prepare_method(self):
@@ -117,9 +163,9 @@ class CompareTestCase(unittest.TestCase):
         # print('similarity', result.similarity)
         # print('diff', result.diff)
 
-        self.assertEqual(result.diff, NO_DIFF)
-        self.assertEqual(result.failed, 0)
-        self.assertEqual(result.similarity, 1.0)
+        self.assertEqual(NO_DIFF, result.diff)
+        self.assertEqual(0, result.failed)
+        self.assertEqual(1.0, result.similarity)
 
     def test_simple_list_with_dicts(self):
         expected = [
@@ -132,11 +178,12 @@ class CompareTestCase(unittest.TestCase):
         ]
         diff = Compare().check(expected, actual)
         self.assertEqual(
-            diff, {
+            {
                 '_content': {
                     0: {'a': ValuesNotEqual('xxx', 'zzz').explain()},
                 },
             },
+            diff,
         )
 
     # The next two tests represent some current behaviour that probably
@@ -158,18 +205,19 @@ class CompareTestCase(unittest.TestCase):
         ]
         diff = Compare().check(expected, actual)
         self.assertEqual(
-            diff, {
+            {
                 '_content': {
                     1: {'a': ValuesNotEqual('iii', 'zzz').explain()},
-                    3: {'a': ValuesNotEqual('jjj', 'zzz').explain()},
+                    3: {'a': ValuesNotEqual('jjj', 'eee').explain()},
                 },
             },
+            diff,
         )
 
     def test_list_with_dicts_with_duplicates(self):
         expected = [
-            {'a': "xxx"},
-            {'a': "iii"},
+            {'a': "xxx"}, # -> 3
+            {'a': "iii"}, # -> 2
             {'a': "xxx"},
             {'a': "jjj"},
         ]
@@ -181,27 +229,38 @@ class CompareTestCase(unittest.TestCase):
         ]
         diff = Compare().check(expected, actual)
         self.assertEqual(
-            diff, {
+       {
                 '_content': {
-                    3: {'a': ValuesNotEqual('jjj', 'zzz').explain()},
+                    2: {'a': ValuesNotEqual('xxx', 'zzz').explain()},
+                    3: {'a': ValuesNotEqual('jjj', 'iii').explain()},
                 },
             },
+            diff
         )
 
     def test_weights(self):
-        e = {'int': 1, 'str': {
-            'not_nested': 'aloha',
-            'nested': { 'attr': 'Hi' }
-        }, 'list': [
-            {'a': 1, 'b': 2},
-            {'a': 3, 'b': 4},
-        ], 'bool': True}
-        a = {'int': 2, 'str': {
-            'not_nested': 'guten tag',
-            'nested': { 'attr': 'Hi2' }
-        }, 'list': [
-            {'a': 1, 'b': 2},
-        ]}
+        e = {
+            'int': 1,
+            'str': {
+                'not_nested': 'aloha',
+                'nested': { 'attr': 'Hi' }
+            },
+            'list': [
+                {'a': 1, 'b': 2},
+                {'a': 3, 'b': 4},
+            ],
+            'bool': True
+        }
+        a = {
+            'int': 2,
+            'str': {
+                'not_nested': 'guten tag',
+                'nested': { 'attr': 'Hi2' }
+            },
+            'list': [
+                {'a': 1, 'b': 2},
+            ]
+        }
 
         compare = Compare(self.config, weights={
             'int': 3,
@@ -224,7 +283,7 @@ class CompareTestCase(unittest.TestCase):
 
         result = compare.calculate_score(e, a)
         self.assertEqual(
-            result.diff, {
+            {
                 'int': ValuesNotEqual(1, 2, 3).explain(),
                 'str': {
                     'not_nested': ValuesNotEqual('aloha', 'guten tag', 10).explain(),
@@ -235,16 +294,14 @@ class CompareTestCase(unittest.TestCase):
                 'list': {
                     '_length': LengthsNotEqual(2, 1, 1 * 0.3).explain(),
                     '_content': {
-                        1: {
-                            'a': ValuesNotEqual(3, 1, 5).explain(),
-                            'b': ValuesNotEqual(4, 2, 1).explain(),
-                        }
+                        1: MissingListItem({'a': 3, 'b': 4}, None).explain(),
                     },
                 },
                 'bool': KeyNotExist('bool', None).explain(),
             },
+            result.diff
         )
-        self.assertEqual(40.3, result.failed_weighted)
+        self.assertEqual(35.3, result.failed_weighted)
 
 
 if __name__ == '__main__':
