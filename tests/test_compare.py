@@ -203,7 +203,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertAlmostEqual(1 - (2 / 6), result.similarity) # the similarity is negative due to the boost, so it is 0 at the end
+        self.assertAlmostEqual(1 - (2 / 6), result.similarity)
 
         result = self.compare.calculate_score(a, e)
         self.assertEqual(
@@ -215,7 +215,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertAlmostEqual(1 - (2 / 8), result.similarity) # the similarity is negative due to the boost, so it is 0 at the end
+        self.assertAlmostEqual(1 - (2 / 8), result.similarity)
 
     def test_prepare_method(self):
         e = [1, 2, 3, 4]
