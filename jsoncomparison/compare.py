@@ -222,10 +222,13 @@ class Compare:
 
     def _list_diff(self, e, a, weight, weights):
         d = {}
+
         if self._need_compare_length():
             length_weight = self._get_weight(weights, '_length')
             d['_length'] = self._list_len_diff(e, a, weight * length_weight)
+
         d['_content'] = self._list_content_diff_new(e, a, weight, weights)
+
         return self._without_empties(d)
 
     def _need_compare_length(self):
@@ -237,6 +240,10 @@ class Compare:
         return self._config.get(path) is True
 
     def _list_content_diff_new(self, e, a, weight, weights):
+        content_weights = weights.get('_content', {})
+        missing_item_weight = self._get_weight(weights, '_missing')
+        extra_item_weight = self._get_weight(weights, '_extra')
+
         # Prepare the score matrix for matrix in size len(e) x len(a)
         score_matrix = np.zeros((len(e), len(a)))
 
@@ -269,15 +276,16 @@ class Compare:
         # and add them to the result
         for i in range(len(e)):
             if i not in row_ind:
-                result[i] = MissingListItem(e[i], None, 1).explain()
+                result[i] = MissingListItem(e[i], None, weight * missing_item_weight).explain()
 
         for j in range(len(a)):
             if j not in col_ind:
-                result[j] = ExtraListItem(None, a[j], 1).explain()
+                result[j] = ExtraListItem(None, a[j], weight * extra_item_weight).explain()
 
         # Now we need to check the elements that were matched
         for i, j in zip(row_ind, col_ind):
-            diff = self._diff(e[i], a[j], weight, weights)
+            i_weight = self._get_weight(content_weights, i) * weight
+            diff = self._diff(e[i], a[j], i_weight, content_weights)
             if diff != NO_DIFF:
                 result[i] = diff
 
