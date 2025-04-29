@@ -24,9 +24,9 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.9"
-numpy = "^1.26.4"
-scipy = "^1.11.4"
+python = "^3.11"
+numpy = "^2.2.5"
+scipy = "^1.15.2"
 
 [tool.poetry.group.dev.dependencies]
 add-trailing-comma = "^3.1"
