@@ -120,7 +120,8 @@ class Compare:
     def check(self, expected, actual):
         e = self.prepare(expected)
         a = self.prepare(actual)
-        diff = self._diff(e, a, 1, self._weights)
+        weight = self._weights['_weight'] if '_weight' in self._weights else 1
+        diff = self._diff(e, a, weight, self._weights)
         self.report(diff)
         return diff
 
