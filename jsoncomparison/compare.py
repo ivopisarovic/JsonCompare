@@ -231,8 +231,8 @@ class Compare:
         path = 'types.list.check_length'
         return self._config.get(path) is True
 
-    def _list_length_influences_weight(self, e, a):
-        path = 'types.list.list_length_influences_weight'
+    def _length_diff_penalty(self, e, a):
+        path = 'types.list.length_diff_penalty'
         return self._config.get(path) is True
 
     def _list_content_diff_new(self, e, a, weight, weights):
@@ -331,7 +331,7 @@ class Compare:
         if e == a:
             return NO_DIFF
 
-        if self._list_length_influences_weight(e, a):
+        if self._length_diff_penalty(e, a):
             length_diff = abs(e - a)
             list_weight = weight * length_diff
         else:
