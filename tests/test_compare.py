@@ -545,7 +545,7 @@ class CompareTestCase(unittest.TestCase):
             {
                 '_length': LengthsNotEqual(1, 2, 4 * 1 * 5).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
                 '_content': {
-                    'extra_1': ExtraListItem(None, {'a': 2, 'b': 3, 'c': 4, 'd': 5}, 5 * 2 * 13).explain(), # _weight * _extra * _boost_missing (total weight of all attributes of the missing object)
+                    'extra_1': ExtraListItem(None, {'a': 2, 'b': 3, 'c': 4, 'd': 5}, 5 * 2 * 13).explain(), # _weight * _extra * _boost_extra (total weight of all attributes of the missing object)
                 },
             },
             result.diff
@@ -560,8 +560,8 @@ class CompareTestCase(unittest.TestCase):
         ]
         a = [
             {'a': 2, 'b': 2, 'c': 1},
-            {'a': 1, 'b': 1, 'c': 2},
-            {'a': 2, 'b': 1, 'c': 1}, # closest to e[0]
+            {'a': 1, 'b': 1, 'c': 2}, # closest to e[0]
+            {'a': 2, 'b': 1, 'c': 1}, # closest to e[0] when respecting weights
         ]
 
         compare = Compare(self.config, weights={
