@@ -107,7 +107,7 @@ class CompareTestCase(unittest.TestCase):
         diff = self.compare.check(e, a)
         self.assertEqual(
             {
-                '_length': LengthsNotEqual(len(e), len(a), 2).explain(), # Warning! Length is multiplied by the difference in lists lengths
+                '_length': LengthsNotEqual(len(e), len(a), 2).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths
                 '_content': {
                     1: ValuesNotEqual(2, 3, 1).explain(),
                     3: ValuesNotEqual(True, False, 1).explain(),
@@ -326,7 +326,7 @@ class CompareTestCase(unittest.TestCase):
             {
                 'str': ValuesNotEqual('hi', 'guten tag', 10).explain(),
                 'list': {
-                    '_length': LengthsNotEqual(3, 1, 2 * 1 * 0.3).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                    '_length': LengthsNotEqual(3, 1, 2 * 1 * 0.3).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
                     '_content': {
                         0: MissingListItem(1, None, 1).explain(),
                         2: MissingListItem(3, None, 1).explain(),
@@ -432,7 +432,7 @@ class CompareTestCase(unittest.TestCase):
         self.assertEqual(
             {
                 'list': {
-                    '_length': LengthsNotEqual(2, 3, 4 * 1 * 0.3).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                    '_length': LengthsNotEqual(2, 3, 4 * 1 * 0.3).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
                     '_content': {
                         1: {
                             'a': ValuesNotEqual(2, 999, 4 * 2).explain(),
@@ -464,7 +464,7 @@ class CompareTestCase(unittest.TestCase):
         result = compare.calculate_score(e, a)
         self.assertEqual(
             {
-                '_length': LengthsNotEqual(3, 2, 6 * 5 * 1).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_length': LengthsNotEqual(3, 2, 6 * 5 * 1).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
                 '_content': {
                     0: {
                         'a': ValuesNotEqual(1, 5, 6 * 2).explain(),
@@ -480,7 +480,7 @@ class CompareTestCase(unittest.TestCase):
         result = compare.calculate_score(a, e)
         self.assertEqual(
             {
-                '_length': LengthsNotEqual(2, 3, 6 * 5 * 1).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_length': LengthsNotEqual(2, 3, 6 * 5 * 1).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
                 '_content': {
                     1: {
                         'a': ValuesNotEqual(5, 1, 6 * 2).explain(),
@@ -491,6 +491,50 @@ class CompareTestCase(unittest.TestCase):
             result.diff
         )
         self.assertEqual(60, result.failed_weighted)
+
+    def test_weights_missing_and_extra_with_boost(self):
+        # similar to prev
+        e = [{'a': 1, 'b': 2}, {'a': 2, 'b': 3, 'c': 4, 'd': 5}]
+        a = [{'a': 1, 'b': 2}]
+
+        compare = Compare(self.config, weights={
+            '_weight': 5,
+            '_length': 4,
+            '_missing': 3,
+            '_boost_missing': True,
+            '_extra': 2,
+            '_boost_extra': True,
+            '_content': {
+                'c': 10
+            }
+        })
+
+        # Compare e and a
+        result = compare.calculate_score(e, a)
+        self.assertEqual(
+            {
+                '_length': LengthsNotEqual(2, 1, 4 * 1 * 5).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_content': {
+                    1: MissingListItem({'a': 2, 'b': 3, 'c': 4, 'd': 5}, None, 5 * 3 * 13).explain(), # _weight * _missing * _boost_missing (total weight of all attributes of the missing object)
+                },
+            },
+            result.diff
+        )
+        self.assertEqual(4 * 1 * 5 + 5 * 3 * 13, result.failed_weighted)
+
+        # Compare a and e (vice versa)
+        result = compare.calculate_score(a, e)
+        self.assertEqual(
+            {
+                '_length': LengthsNotEqual(1, 2, 4 * 1 * 5).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_content': {
+                    'extra_1': ExtraListItem(None, {'a': 2, 'b': 3, 'c': 4, 'd': 5}, 5 * 2 * 13).explain(), # _weight * _extra * _boost_missing (total weight of all attributes of the missing object)
+                },
+            },
+            result.diff
+        )
+        self.assertEqual(4 * 1 * 5 + 5 * 2 * 13, result.failed_weighted)
+
 
     def test_list_pairing_with_weights(self):
         e = [
@@ -514,7 +558,7 @@ class CompareTestCase(unittest.TestCase):
         result = compare.calculate_score(e, a)
         self.assertEqual(
             {
-                '_length': LengthsNotEqual(1, 3, 2).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_length': LengthsNotEqual(1, 3, 2).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
                 '_content': {
                     0: {
                         'a': ValuesNotEqual(1, 2, 1).explain(),
@@ -570,7 +614,7 @@ class CompareTestCase(unittest.TestCase):
         result = compare.calculate_score(e, a)
         self.assertEqual(
             {
-                '_length': LengthsNotEqual(1, 2, 1).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_length': LengthsNotEqual(1, 2, 1).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
                 '_content': {
                     0: {
                         'a': ValuesNotEqual(1, 999, 1).explain(),

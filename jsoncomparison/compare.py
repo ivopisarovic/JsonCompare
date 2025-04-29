@@ -146,6 +146,11 @@ class Compare:
 
         return 1
 
+    def _get_boolean(self, config, key):
+        if isinstance(config, dict) and key in config:
+            return config[key] is True
+        return False
+
     def _diff(self, e, a, weight, weights):
         t = type(e)
         if not isinstance(a, t):
@@ -253,10 +258,16 @@ class Compare:
         path = 'types.list.length_diff_penalty'
         return self._config.get(path) is True
 
+    def _get_boost_weight(self, item, weights):
+        diff = self._diff(item, {}, 1, weights)
+        return Result(item, diff).failed_weighted
+
     def _list_content_diff_new(self, e, a, list_weight, weights):
         content_weights = self._get_nested_weights(weights, '_content')
         missing_item_weight = self._get_weight(weights, '_missing')
+        boost_missing_item_weight = self._get_boolean(weights, '_boost_missing')
         extra_item_weight = self._get_weight(weights, '_extra')
+        boost_extra_item_weight = self._get_boolean(weights, '_boost_extra')
 
         # Prepare the score matrix for matrix in size len(e) x len(a)
         score_matrix = np.zeros((len(e), len(a)))
@@ -290,11 +301,15 @@ class Compare:
         # and add them to the result
         for i in range(len(e)):
             if i not in row_ind:
-                result[i] = MissingListItem(e[i], None, list_weight * missing_item_weight).explain()
+                i_boost_weight = self._get_boost_weight(e[i], content_weights) if boost_missing_item_weight else 1
+                i_weight = list_weight * missing_item_weight * i_boost_weight
+                result[i] = MissingListItem(e[i], None, i_weight).explain()
 
         for j in range(len(a)):
             if j not in col_ind:
-                result['extra_' + str(j)] = ExtraListItem(None, a[j], list_weight * extra_item_weight).explain()
+                j_boost_weight = self._get_boost_weight(a[j], content_weights) if boost_extra_item_weight else 1
+                j_weight = list_weight * extra_item_weight * j_boost_weight
+                result['extra_' + str(j)] = ExtraListItem(None, a[j], j_weight).explain()
 
         # Now we need to check the elements that were matched
         for i, j in zip(row_ind, col_ind):
