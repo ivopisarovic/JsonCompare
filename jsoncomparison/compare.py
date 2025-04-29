@@ -249,22 +249,34 @@ class Compare:
 
         return {}
 
-    def _dict_diff(self, e, a, weight, weights):
+    def _dict_diff(self, e, a, dict_weight, weights):
+        missing_item_weight = self._get_weight(weights, '_missing')
+        boost_missing_item_weight = self._get_boolean(weights, '_boost_missing')
+        extra_item_weight = self._get_weight(weights, '_extra')
+        boost_extra_item_weight = self._get_boolean(weights, '_boost_extra')
+
         d = {}
+
         for k in e:
-            k_weight = self._get_weight(weights, k) * weight
+            k_attr_weight = self._get_weight(weights, k)
+            nested_weights = self._get_nested_weights(weights, k)
             if k not in a:
+                k_boost_weight = self._get_boost_weight(e[k], nested_weights) if boost_missing_item_weight else 1
+                k_weight = dict_weight * k_attr_weight * missing_item_weight * k_boost_weight
                 d[k] = KeyNotExist(k, None, k_weight).explain()
             else:
-                nested_weights = self._get_nested_weights(weights, k)
+                k_weight = dict_weight * k_attr_weight
                 d[k] = self._diff(e[k], a[k], k_weight, nested_weights)
 
         for k in a:
-            k_weight = self._get_weight(weights, k) * weight
+            k_attr_weight = self._get_weight(weights, k)
+            nested_weights = self._get_nested_weights(weights, k)
             if k not in e:
+                k_boost_weight = self._get_boost_weight(a[k], nested_weights) if boost_extra_item_weight else 1
+                k_weight = dict_weight * k_attr_weight * extra_item_weight * k_boost_weight
                 d[k] = UnexpectedKey(None, k, k_weight).explain()
             else:
-                nested_weights = self._get_nested_weights(weights, k)
+                k_weight = dict_weight * k_attr_weight
                 d[k] = self._diff(e[k], a[k], k_weight, nested_weights)
 
         return self._without_empties(d)

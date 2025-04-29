@@ -460,7 +460,7 @@ class CompareTestCase(unittest.TestCase):
         self.assertEqual(8 + 4 + 8 + 4, result.weighted_count)
         self.assertAlmostEqual(1 - (13.2 / 24), result.similarity)
 
-    def test_weights_missing_and_extra(self):
+    def test_list_missing_and_extra(self):
         e = [{'a': 1}, {'a': 2}, {'a': 3}]
         a = [{'a': 2}, {'a': 5}]
 
@@ -508,7 +508,30 @@ class CompareTestCase(unittest.TestCase):
         self.assertEqual(60, result.failed_weighted)
         self.assertAlmostEqual(0, result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
-    def test_weights_missing_and_extra_with_boost(self):
+    def test_dict_missing_and_extra(self):
+        e = {'a': 1, 'b': 2}
+        a = {'b': 2, 'd': 4}
+
+        compare = Compare(self.config, weights={
+            '_weight': 6,
+            '_missing': 5,
+            '_extra': 4,
+            'a': 3,
+            'd': 2,
+        })
+
+        result = compare.calculate_score(e, a)
+        self.assertEqual(
+            {
+                'a': KeyNotExist('a', None, 6 * 5 * 3).explain(),
+                'd': UnexpectedKey(None, 'd', 6 * 4 * 2).explain(),
+            },
+            result.diff
+        )
+        self.assertEqual(90 + 48, result.failed_weighted)
+        self.assertAlmostEqual(0, result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
+
+    def test_list_missing_and_extra_with_boost(self):
         # similar to prev
         e = [{'a': 1, 'b': 2}, {'a': 2, 'b': 3, 'c': 4, 'd': 5}]
         a = [{'a': 1, 'b': 2}]
@@ -553,6 +576,33 @@ class CompareTestCase(unittest.TestCase):
         self.assertEqual(4 * 1 * 5 + 5 * 2 * 13, result.failed_weighted)
         self.assertAlmostEqual(0, result.similarity) # the similarity is negative due to the boost, so it is 0 at the end
 
+    def test_dict_missing_and_extra_with_boost(self):
+        # similar to prev
+        e = {'b': {'x': 2}, 'c': {'x': 5, 'y': 6, 'z': 7}}
+        a = {'b': {'x': 2}, 'p': {'x': 8, 'y': 9}}
+
+        compare = Compare(self.config, weights={
+            '_weight': 6,
+            '_missing': 5,
+            '_boost_missing': True,
+            '_extra': 4,
+            '_boost_extra': True,
+            'c': {
+                '_weight': 3,
+                'y': 2,
+            }
+        })
+
+        result = compare.calculate_score(e, a)
+        self.assertEqual(
+            {
+                'c': KeyNotExist('c', None, 6 * 5 * 3 * (1 + 2 + 1)).explain(),
+                'p': UnexpectedKey(None, 'p', 6 * 4 * 1 * (1 + 1)).explain(),
+            },
+            result.diff
+        )
+        self.assertEqual(360 + 48, result.failed_weighted)
+        self.assertAlmostEqual(0, result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
     def test_list_pairing_with_weights(self):
         e = [
