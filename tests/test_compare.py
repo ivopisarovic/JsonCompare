@@ -111,8 +111,8 @@ class CompareTestCase(unittest.TestCase):
                 '_content': {
                     1: ValuesNotEqual(2, 3, 1).explain(),
                     3: ValuesNotEqual(True, False, 1).explain(),
-                    4: ExtraListItem(None, None, 1).explain(),
-                    5: ExtraListItem(None, None, 1).explain(),
+                    'extra_4': ExtraListItem(None, None, 1).explain(),
+                    'extra_5': ExtraListItem(None, None, 1).explain(),
                 },
             },
             diff,
@@ -133,8 +133,8 @@ class CompareTestCase(unittest.TestCase):
         diff = compare.check(e, a)
         self.assertEqual({
             '_content': {
-                3: ExtraListItem(None, 4, 1).explain(),
-                4: ExtraListItem(None, 5, 1).explain(),
+                'extra_3': ExtraListItem(None, 4, 1).explain(),
+                'extra_4': ExtraListItem(None, 5, 1).explain(),
             },
         }, diff)
 
@@ -151,8 +151,8 @@ class CompareTestCase(unittest.TestCase):
         self.assertEqual({
             '_length': LengthsNotEqual(len(e), len(a), 1).explain(),
             '_content': {
-                3: ExtraListItem(None, 4, 1).explain(),
-                4: ExtraListItem(None, 5, 1).explain(),
+                'extra_3': ExtraListItem(None, 4, 1).explain(),
+                'extra_4': ExtraListItem(None, 5, 1).explain(),
             },
         }, diff)
 
@@ -169,8 +169,8 @@ class CompareTestCase(unittest.TestCase):
         self.assertEqual({
             '_length': LengthsNotEqual(len(e), len(a), 2).explain(),
             '_content': {
-                3: ExtraListItem(None, 4, 1).explain(),
-                4: ExtraListItem(None, 5, 1).explain(),
+                'extra_3': ExtraListItem(None, 4, 1).explain(),
+                'extra_4': ExtraListItem(None, 5, 1).explain(),
             },
         }, diff)
 
@@ -198,7 +198,7 @@ class CompareTestCase(unittest.TestCase):
             {
                 '_length': LengthsNotEqual(len(e), len(a)).explain(),
                 '_content': {
-                    3: ExtraListItem(None, {'a': 4, 'b': 5}).explain(),
+                    'extra_3': ExtraListItem(None, {'a': 4, 'b': 5}).explain(),
                 },
             },
             diff
@@ -414,7 +414,7 @@ class CompareTestCase(unittest.TestCase):
                         1: {
                             'a': ValuesNotEqual(2, 999, 4 * 2).explain(),
                         },
-                        2: ExtraListItem(None, {'a': 4, 'b': 5},4).explain(),
+                        'extra_2': ExtraListItem(None, {'a': 4, 'b': 5},4).explain(),
                     },
                 },
             },
@@ -462,7 +462,7 @@ class CompareTestCase(unittest.TestCase):
                     1: {
                         'a': ValuesNotEqual(5, 1, 6 * 2).explain(),
                     },
-                    2: ExtraListItem(None, {'a': 3}, 6 * 3).explain(),
+                    'extra_2': ExtraListItem(None, {'a': 3}, 6 * 3).explain(),
                 },
             },
             result.diff

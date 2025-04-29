@@ -239,7 +239,7 @@ class Compare:
         path = 'types.list.length_diff_penalty'
         return self._config.get(path) is True
 
-    def _list_content_diff_new(self, e, a, weight, weights):
+    def _list_content_diff_new(self, e, a, list_weight, weights):
         content_weights = weights.get('_content', {})
         missing_item_weight = self._get_weight(weights, '_missing')
         extra_item_weight = self._get_weight(weights, '_extra')
@@ -251,7 +251,7 @@ class Compare:
         for i, v in enumerate(e):
             for j, w in enumerate(a):
                 if type(v) is type(w):
-                    similarity = self._calculate_similarity(v, w, weight, weights)
+                    similarity = self._calculate_similarity(v, w, list_weight, content_weights)
                     score_matrix[i, j] = similarity
 
         # Hungarian algorithm optimizes the cost, so we need to convert scores to costs.
@@ -276,16 +276,15 @@ class Compare:
         # and add them to the result
         for i in range(len(e)):
             if i not in row_ind:
-                result[i] = MissingListItem(e[i], None, weight * missing_item_weight).explain()
+                result[i] = MissingListItem(e[i], None, list_weight * missing_item_weight).explain()
 
         for j in range(len(a)):
             if j not in col_ind:
-                result[j] = ExtraListItem(None, a[j], weight * extra_item_weight).explain()
+                result['extra_' + str(j)] = ExtraListItem(None, a[j], list_weight * extra_item_weight).explain()
 
         # Now we need to check the elements that were matched
         for i, j in zip(row_ind, col_ind):
-            i_weight = self._get_weight(content_weights, i) * weight
-            diff = self._diff(e[i], a[j], i_weight, content_weights)
+            diff = self._diff(e[i], a[j], list_weight, content_weights)
             if diff != NO_DIFF:
                 result[i] = diff
 
