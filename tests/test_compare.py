@@ -379,6 +379,29 @@ class CompareTestCase(unittest.TestCase):
 
         self.assertEqual(28, result.failed_weighted)
 
+    def test_weights_different_syntax(self):
+        e = {
+            'obj': {'nested_str': 'aloha'},
+            'list': [1, 2]
+        }
+        a = {
+            'obj': {'nested_str': 'guten tag'},
+            'list': [1, 4]
+        }
+
+        compare = Compare(self.config, weights={
+            'obj': { '_weight': 3 },
+            'list': { '_weight': 2 }
+        })
+        result = compare.calculate_score(e, a)
+        self.assertEqual(5, result.failed_weighted)
+
+        compare = Compare(self.config, weights={
+            'obj': 3,
+            'list': 2
+        })
+        result = compare.calculate_score(e, a)
+        self.assertEqual(5, result.failed_weighted)
 
     def test_weights_lists_with_objects(self):
         e = {

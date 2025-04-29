@@ -131,6 +131,9 @@ class Compare:
 
     @staticmethod
     def _get_weight(weights, key):
+        if isinstance(weights, (int, float)):
+            return weights
+
         if key in weights:
             if isinstance(weights[key], dict):
                 return weights[key]['_weight'] if '_weight' in weights[key] else 1
@@ -140,6 +143,7 @@ class Compare:
                 raise TypeError(
                     f"Invalid weight type for key '{key}': {type(weights[key])}"
                 )
+
         return 1
 
     def _diff(self, e, a, weight, weights):
@@ -200,6 +204,16 @@ class Compare:
         path = 'types.float.allow_round'
         return self._config.get(path)
 
+    def _get_nested_weights(self, weights, key):
+        if (
+            isinstance(weights, dict) and
+            key in weights and
+            isinstance(weights[key], dict)
+        ):
+            return weights.get(key)
+
+        return {}
+
     def _dict_diff(self, e, a, weight, weights):
         d = {}
         for k in e:
@@ -207,7 +221,7 @@ class Compare:
             if k not in a:
                 d[k] = KeyNotExist(k, None, k_weight).explain()
             else:
-                nested_weights = weights.get(k, {})
+                nested_weights = self._get_nested_weights(weights, k)
                 d[k] = self._diff(e[k], a[k], k_weight, nested_weights)
 
         for k in a:
@@ -215,7 +229,7 @@ class Compare:
             if k not in e:
                 d[k] = UnexpectedKey(None, k, k_weight).explain()
             else:
-                nested_weights = weights.get(k, {})
+                nested_weights = self._get_nested_weights(weights, k)
                 d[k] = self._diff(e[k], a[k], k_weight, nested_weights)
 
         return self._without_empties(d)
@@ -240,7 +254,7 @@ class Compare:
         return self._config.get(path) is True
 
     def _list_content_diff_new(self, e, a, list_weight, weights):
-        content_weights = weights.get('_content', {})
+        content_weights = self._get_nested_weights(weights, '_content')
         missing_item_weight = self._get_weight(weights, '_missing')
         extra_item_weight = self._get_weight(weights, '_extra')
 
