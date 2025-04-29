@@ -492,8 +492,100 @@ class CompareTestCase(unittest.TestCase):
         )
         self.assertEqual(60, result.failed_weighted)
 
+    def test_list_pairing_with_weights(self):
+        e = [
+            {'a': 1, 'b': 1, 'c': 1},
+        ]
+        a = [
+            {'a': 2, 'b': 2, 'c': 1},
+            {'a': 1, 'b': 1, 'c': 2},
+            {'a': 2, 'b': 1, 'c': 1}, # closest to e[0]
+        ]
 
+        compare = Compare(self.config, weights={
+            '_content': {
+                'a': 1,
+                'b': 1,
+                'c': 10,
+            }
+        })
 
+        # Should match e[0] with a[2] because c has the highest weight
+        result = compare.calculate_score(e, a)
+        self.assertEqual(
+            {
+                '_length': LengthsNotEqual(1, 3, 2).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_content': {
+                    0: {
+                        'a': ValuesNotEqual(1, 2, 1).explain(),
+                    },
+                    'extra_0': ExtraListItem(None, {'a': 2, 'b': 2, 'c': 1}, 1).explain(),
+                    'extra_1': ExtraListItem(None, {'a': 1, 'b': 1, 'c': 2}, 1).explain(),
+                },
+            },
+            result.diff
+        )
+        self.assertEqual(5, result.failed_weighted)
+
+    def test_list_pairing_with_weights_advanced(self):
+        e = [
+            { # should pair with a[1]
+                'a': 1,
+                'c': [
+                    {'d': 4, 'e': 5},
+                    {'d': 6, 'e': 7},
+                ]
+            },
+        ]
+        a = [
+            { # this does not pair with e[0] because there are two different attributes in `c`, which matters more than matching `a` attribute due to weights
+                'a': 1,
+                'c': [
+                    {'d': 999, 'e': 5},
+                    {'d': 999, 'e': 7},
+                ]
+            },
+            {
+                'a': 999, # this is different, but it does not matter because it has low weight
+                'c': [ # list items order is different, but it does not matter at all, pairing should correctly map (d: 4, e: 5) with (d: 999, e: 5)
+                    {'d': 6, 'e': 7},
+                    {'d': 999, 'e': 5}, # there is a difference in one attribute, but it should have small effect on pairings
+                ]
+            }
+        ]
+
+        compare = Compare(self.config, weights={
+            '_content': {
+                'a': 1,
+                'c': {
+                    '_weight': 10
+                }
+            }
+        })
+
+        # Should match e[0] with a[1] because:
+        # - `a` has low weight and does not matter as much as `c`
+        # - `c` items are in different order, but it should have zero effect on pairing
+        # - `c` has one different attribute, but it should have smaller effect than two different attributes in a[0]
+        result = compare.calculate_score(e, a)
+        self.assertEqual(
+            {
+                '_length': LengthsNotEqual(1, 2, 1).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_content': {
+                    0: {
+                        'a': ValuesNotEqual(1, 999, 1).explain(),
+                        'c': {
+                            '_content': {
+                                0: {'d': ValuesNotEqual(4, 999, 10).explain()},
+                            }
+                        },
+                    },
+                    'extra_0': ExtraListItem(None, {'a': 1, 'c': [{'d': 999, 'e': 5}, {'d': 999, 'e': 7}]}, 1).explain(),
+                }
+            },
+            result.diff
+        )
+        self.assertEqual(13, result.failed_weighted)
 
 
 if __name__ == '__main__':
