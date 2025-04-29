@@ -18,7 +18,21 @@ from . import load_json
 class CompareTestCase(unittest.TestCase):
 
     def setUp(self):
-        self.config = load_json('compare/config.json')
+        self.config = {
+            "types": {
+                "float": {
+                    "allow_round": 2
+                },
+                "list": {
+                    "check_length": True,
+                    "length_diff_penalty": True
+                }
+            },
+            "output": {
+                "console": False,
+                "file": False
+            }
+        }
         self.compare = Compare(self.config)
 
     def test_compare_int(self):
@@ -85,7 +99,7 @@ class CompareTestCase(unittest.TestCase):
 
     def test_list_compare(self):
         e = [1.23, 2, 'three', True]
-        a = [1.23, 3, 'three', False, None]
+        a = [1.23, 3, 'three', False, None, None]
 
         diff = self.compare.check(e, e)
         self.assertEqual(diff, NO_DIFF)
@@ -93,30 +107,87 @@ class CompareTestCase(unittest.TestCase):
         diff = self.compare.check(e, a)
         self.assertEqual(
             {
-                '_length': LengthsNotEqual(len(e), len(a)).explain(),
+                '_length': LengthsNotEqual(len(e), len(a), 2).explain(), # Warning! Length is multiplied by the difference in lists lengths
                 '_content': {
                     1: ValuesNotEqual(2, 3, 1).explain(),
                     3: ValuesNotEqual(True, False, 1).explain(),
                     4: ExtraListItem(None, None, 1).explain(),
+                    5: ExtraListItem(None, None, 1).explain(),
                 },
             },
             diff,
         )
 
-    def test_depp_list_compare(self):
+    def test_list_length_difference(self):
+        e = [1, 2, 3]
+        a = [1, 2, 3, 4, 5]
+
+        # Do not check lengths
+        compare = Compare({
+            "types": {
+                "list": {
+                    "check_length": False,
+                }
+            }
+        })
+        diff = compare.check(e, a)
+        self.assertEqual({
+            '_content': {
+                3: ExtraListItem(None, 4, 1).explain(),
+                4: ExtraListItem(None, 5, 1).explain(),
+            },
+        }, diff)
+
+        # Check lengths but do not penalize
+        compare = Compare({
+            "types": {
+                "list": {
+                    "check_length": True,
+                    "length_diff_penalty": False
+                }
+            }
+        })
+        diff = compare.check(e, a)
+        self.assertEqual({
+            '_length': LengthsNotEqual(len(e), len(a), 1).explain(),
+            '_content': {
+                3: ExtraListItem(None, 4, 1).explain(),
+                4: ExtraListItem(None, 5, 1).explain(),
+            },
+        }, diff)
+
+        # Check lengths and penalize by the difference in lengths of the lists (2)
+        compare = Compare({
+            "types": {
+                "list": {
+                    "check_length": True,
+                    "length_diff_penalty": True
+                }
+            }
+        })
+        diff = compare.check(e, a)
+        self.assertEqual({
+            '_length': LengthsNotEqual(len(e), len(a), 2).explain(),
+            '_content': {
+                3: ExtraListItem(None, 4, 1).explain(),
+                4: ExtraListItem(None, 5, 1).explain(),
+            },
+        }, diff)
+
+
+    def test_deep_list_compare(self):
         # Test with nested lists
         # Items should be matched correctly using Hungarian algorithm
-
         e = [
-            {'key': 1, 'value': 2},
-            {'key': 2, 'value': 3},
-            {'key': 3, 'value': 4},
+            {'a': 1, 'b': 2},
+            {'a': 2, 'b': 3},
+            {'a': 3, 'b': 4},
         ]
         a = [
-            {'key': 1, 'value': 2},
-            {'key': 3, 'value': 4},
-            {'key': 2, 'value': 3},
-            {'key': 4, 'value': 5},
+            {'a': 1, 'b': 2},
+            {'a': 3, 'b': 4},
+            {'a': 2, 'b': 3},
+            {'a': 4, 'b': 5},
         ]
 
         diff = self.compare.check(e, e)
@@ -127,7 +198,7 @@ class CompareTestCase(unittest.TestCase):
             {
                 '_length': LengthsNotEqual(len(e), len(a)).explain(),
                 '_content': {
-                    3: ExtraListItem(None, {'key': 4, 'value': 5}).explain(),
+                    3: ExtraListItem(None, {'a': 4, 'b': 5}).explain(),
                 },
             },
             diff
@@ -138,7 +209,7 @@ class CompareTestCase(unittest.TestCase):
             {
                 '_length': LengthsNotEqual(len(a), len(e)).explain(),
                 '_content': {
-                    3: MissingListItem({'key': 4, 'value': 5}, None).explain(),
+                    3: MissingListItem({'a': 4, 'b': 5}, None).explain(),
                 },
             },
             diff
@@ -238,70 +309,168 @@ class CompareTestCase(unittest.TestCase):
             diff
         )
 
-    def test_weights(self):
-        e = {
-            'int': 1,
-            'str': {
-                'not_nested': 'aloha',
-                'nested': { 'attr': 'Hi' }
-            },
-            'list': [
-                {'a': 1, 'b': 2},
-                {'a': 3, 'b': 4},
-            ],
-            'bool': True
-        }
-        a = {
-            'int': 2,
-            'str': {
-                'not_nested': 'guten tag',
-                'nested': { 'attr': 'Hi2' }
-            },
-            'list': [
-                {'a': 1, 'b': 2},
-            ]
-        }
+    def test_weights_basic(self):
+        e = { 'int': 1, 'str': 'hi', 'list': [1, 2, 3], 'bool': True }
+        a = { 'int': 1, 'str': 'guten tag', 'list': [2] }
 
         compare = Compare(self.config, weights={
             'int': 3,
-            'str': {
-                '_weight': 10,
-                'nested': {
-                    'attr': 2,
-                }
-            },
+            'str': 10,
             'list': {
                 '_length': 0.3,
-                '_list': {
-                    'a': 5
-                }
             },
         })
-
-        result = compare.calculate_score(e, e)
-        self.assertEqual(result.diff, NO_DIFF)
 
         result = compare.calculate_score(e, a)
         self.assertEqual(
             {
-                'int': ValuesNotEqual(1, 2, 3).explain(),
-                'str': {
-                    'not_nested': ValuesNotEqual('aloha', 'guten tag', 10).explain(),
-                    'nested': {
-                        'attr': ValuesNotEqual('Hi', 'Hi2', 20).explain(),
-                    },
-                },
+                'str': ValuesNotEqual('hi', 'guten tag', 10).explain(),
                 'list': {
-                    '_length': LengthsNotEqual(2, 1, 1 * 0.3).explain(),
+                    '_length': LengthsNotEqual(3, 1, 2 * 1 * 0.3).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
                     '_content': {
-                        1: MissingListItem({'a': 3, 'b': 4}, None).explain(),
+                        0: MissingListItem(1, None, 1).explain(),
+                        2: MissingListItem(3, None, 1).explain(),
                     },
                 },
-                'bool': KeyNotExist('bool', None).explain(),
+                'bool': KeyNotExist('bool', None, 1).explain(),
             },
             result.diff
         )
-        self.assertEqual(35.3, result.failed_weighted)
+
+        self.assertEqual(13.6, result.failed_weighted)
+
+    def test_weights_nested_objects(self):
+        e = {
+            'obj': {
+                'nested_str': 'aloha',
+                'nested_obj': { 'attr': 'Hi' }
+            },
+        }
+        a = {
+            'obj': {
+                'nested_str': 'guten tag',
+                'nested_obj': { 'attr': 'Hi2' }
+            },
+        }
+
+        compare = Compare(self.config, weights={
+            'obj': {
+                '_weight': 4, # weight of the whole `obj` object
+                'nested_str': 3,
+                'nested_obj': {
+                    '_weight': 2, # weight of the whole `nested_obj` object
+                    'attr': 2,
+                }
+            }
+        })
+
+        result = compare.calculate_score(e, a)
+        self.assertEqual(
+            {
+                'obj': {
+                    'nested_str': ValuesNotEqual('aloha', 'guten tag', 4 * 3).explain(),
+                    'nested_obj': {
+                        'attr': ValuesNotEqual('Hi', 'Hi2', 4 * 2 * 2).explain(),
+                    },
+                },
+            },
+            result.diff
+        )
+
+        self.assertEqual(28, result.failed_weighted)
+
+
+    def test_weights_lists_with_objects(self):
+        e = {
+            'list': [
+                {'a': 1, 'b': 2},
+                {'a': 2, 'b': 3},
+            ]
+        }
+        a = {
+            'list': [
+                {'a': 1, 'b': 2},
+                {'a': 999, 'b': 3},
+                {'a': 4, 'b': 5},
+            ]
+        }
+
+        compare = Compare(self.config, weights={
+            'list': {
+                '_weight': 4,
+                '_length': 0.3,
+                '_content': {
+                    'a': 2
+                }
+            }
+        })
+
+        result = compare.calculate_score(e, a)
+        self.assertEqual(
+            {
+                'list': {
+                    '_length': LengthsNotEqual(2, 3, 4 * 1 * 0.3).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                    '_content': {
+                        1: {
+                            'a': ValuesNotEqual(2, 999, 4 * 2).explain(),
+                        },
+                        2: ExtraListItem(None, {'a': 4, 'b': 5},4).explain(),
+                    },
+                },
+            },
+            result.diff
+        )
+
+        self.assertEqual(13.2, result.failed_weighted)
+
+    def test_weights_missing_and_extra(self):
+        e = [{'a': 1}, {'a': 2}, {'a': 3}]
+        a = [{'a': 2}, {'a': 5}]
+
+        compare = Compare(self.config, weights={
+            '_weight': 6,
+            '_length': 5,
+            '_missing': 4,
+            '_extra': 3,
+            '_content': {
+                'a': 2,
+            }
+        })
+
+        # Compare e and a
+        result = compare.calculate_score(e, a)
+        self.assertEqual(
+            {
+                '_length': LengthsNotEqual(3, 2, 6 * 5 * 1).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_content': {
+                    0: {
+                        'a': ValuesNotEqual(1, 5, 6 * 2).explain(),
+                    },
+                    2: MissingListItem({'a': 3}, None, 6 * 4).explain(),
+                },
+            },
+            result.diff
+        )
+        self.assertEqual(66, result.failed_weighted)
+
+        # Compare a and e (vice versa)
+        result = compare.calculate_score(a, e)
+        self.assertEqual(
+            {
+                '_length': LengthsNotEqual(2, 3, 6 * 5 * 1).explain(), # Warning! Length is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_content': {
+                    1: {
+                        'a': ValuesNotEqual(5, 1, 6 * 2).explain(),
+                    },
+                    2: ExtraListItem(None, {'a': 3}, 6 * 3).explain(),
+                },
+            },
+            result.diff
+        )
+        self.assertEqual(60, result.failed_weighted)
+
+
+
 
 
 if __name__ == '__main__':
