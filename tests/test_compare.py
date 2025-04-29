@@ -190,10 +190,10 @@ class CompareTestCase(unittest.TestCase):
             {'a': 4, 'b': 5},
         ]
 
-        diff = self.compare.check(e, e)
-        self.assertEqual(diff, NO_DIFF)
+        result = self.compare.calculate_score(e, e)
+        self.assertEqual(result.diff, NO_DIFF)
 
-        diff = self.compare.check(e, a)
+        result = self.compare.calculate_score(e, a)
         self.assertEqual(
             {
                 '_length': LengthsNotEqual(len(e), len(a)).explain(),
@@ -201,10 +201,11 @@ class CompareTestCase(unittest.TestCase):
                     'extra_3': ExtraListItem(None, {'a': 4, 'b': 5}).explain(),
                 },
             },
-            diff
+            result.diff
         )
+        self.assertAlmostEqual(1 - (2 / 6), result.similarity) # the similarity is negative due to the boost, so it is 0 at the end
 
-        diff = self.compare.check(a, e)
+        result = self.compare.calculate_score(a, e)
         self.assertEqual(
             {
                 '_length': LengthsNotEqual(len(a), len(e)).explain(),
@@ -212,8 +213,9 @@ class CompareTestCase(unittest.TestCase):
                     3: MissingListItem({'a': 4, 'b': 5}, None).explain(),
                 },
             },
-            diff
+            result.diff
         )
+        self.assertAlmostEqual(1 - (2 / 8), result.similarity) # the similarity is negative due to the boost, so it is 0 at the end
 
     def test_prepare_method(self):
         e = [1, 2, 3, 4]
@@ -336,8 +338,10 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-
         self.assertEqual(13.6, result.failed_weighted)
+        self.assertEqual(6, result.count)
+        self.assertEqual(17, result.weighted_count)
+        self.assertAlmostEqual(1 - (13.6 / 17), result.similarity)
 
     def test_weights_nested_objects(self):
         e = {
@@ -376,8 +380,10 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-
         self.assertEqual(28, result.failed_weighted)
+        self.assertEqual(2, result.count)
+        self.assertEqual(12 + 16, result.weighted_count)
+        self.assertAlmostEqual(1 - (28 / 28), result.similarity)
 
     def test_weights_different_syntax(self):
         e = {
@@ -395,6 +401,9 @@ class CompareTestCase(unittest.TestCase):
         })
         result = compare.calculate_score(e, a)
         self.assertEqual(5, result.failed_weighted)
+        self.assertEqual(3, result.count)
+        self.assertEqual(3 + 2 + 2, result.weighted_count)
+        self.assertAlmostEqual(1 - (5 / 7), result.similarity)
 
         compare = Compare(self.config, weights={
             'obj': 3,
@@ -402,6 +411,9 @@ class CompareTestCase(unittest.TestCase):
         })
         result = compare.calculate_score(e, a)
         self.assertEqual(5, result.failed_weighted)
+        self.assertEqual(3, result.count)
+        self.assertEqual(3 + 2 + 2, result.weighted_count)
+        self.assertAlmostEqual(1 - (5 / 7), result.similarity)
 
     def test_weights_lists_with_objects(self):
         e = {
@@ -443,8 +455,10 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-
         self.assertEqual(13.2, result.failed_weighted)
+        self.assertEqual(4, result.count)
+        self.assertEqual(8 + 4 + 8 + 4, result.weighted_count)
+        self.assertAlmostEqual(1 - (13.2 / 24), result.similarity)
 
     def test_weights_missing_and_extra(self):
         e = [{'a': 1}, {'a': 2}, {'a': 3}]
@@ -475,6 +489,7 @@ class CompareTestCase(unittest.TestCase):
             result.diff
         )
         self.assertEqual(66, result.failed_weighted)
+        self.assertAlmostEqual(0, result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
         # Compare a and e (vice versa)
         result = compare.calculate_score(a, e)
@@ -491,6 +506,7 @@ class CompareTestCase(unittest.TestCase):
             result.diff
         )
         self.assertEqual(60, result.failed_weighted)
+        self.assertAlmostEqual(0, result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
     def test_weights_missing_and_extra_with_boost(self):
         # similar to prev
@@ -521,6 +537,7 @@ class CompareTestCase(unittest.TestCase):
             result.diff
         )
         self.assertEqual(4 * 1 * 5 + 5 * 3 * 13, result.failed_weighted)
+        self.assertAlmostEqual(0, result.similarity) # the similarity is negative due to the boost, so it is 0 at the end
 
         # Compare a and e (vice versa)
         result = compare.calculate_score(a, e)
@@ -534,6 +551,7 @@ class CompareTestCase(unittest.TestCase):
             result.diff
         )
         self.assertEqual(4 * 1 * 5 + 5 * 2 * 13, result.failed_weighted)
+        self.assertAlmostEqual(0, result.similarity) # the similarity is negative due to the boost, so it is 0 at the end
 
 
     def test_list_pairing_with_weights(self):
@@ -570,6 +588,8 @@ class CompareTestCase(unittest.TestCase):
             result.diff
         )
         self.assertEqual(5, result.failed_weighted)
+        self.assertAlmostEqual(1 + 1 + 10, result.weighted_count)
+        self.assertAlmostEqual(1 - (5 / 12), result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
     def test_list_pairing_with_weights_advanced(self):
         e = [
@@ -630,6 +650,54 @@ class CompareTestCase(unittest.TestCase):
             result.diff
         )
         self.assertEqual(13, result.failed_weighted)
+        self.assertAlmostEqual(1 + 4 * 10, result.weighted_count)
+        self.assertAlmostEqual(1 - (13 / 41), result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
+
+
+    def test_list_pairing_threshold(self):
+        # e[0] is similar to a[1] with similarity 0.5
+        # e[1] is not similar to a[0], similarity is 0.0
+        # e[2] is same as a[2] with similarity 1.0
+        e = [{'a': 1, 'b': 2}, {'a': 3, 'b': 4}, {'a': 5, 'b': 6}]
+        a = [{'a': 999, 'b': 999}, {'a': 1, 'b': 999}, {'a': 5, 'b': 6}]
+
+        # All should be paired because similarities of both pairs are above the threshold
+        compare = Compare(self.config, weights={'_pairing_threshold': 0})
+        result = compare.calculate_score(e, a)
+        self.assertEqual({'_content': {
+            0: {
+                'b': ValuesNotEqual(2, 999, 1).explain(),
+            },
+            1: {
+                'a': ValuesNotEqual(3, 999, 1).explain(),
+                'b': ValuesNotEqual(4, 999, 1).explain(),
+            }
+        }}, result.diff)
+        self.assertEqual(3, result.failed_weighted)
+
+        # Items e[0] and e[2] are paired, but e[1] is not paired due to the threshold set to 0.4
+        # Item e[1] should not be paired and throws MissingListItem and ExtraListItem instead of ValuesNotEqual
+        compare = Compare(self.config, weights={'_pairing_threshold': 0.4})
+        result = compare.calculate_score(e, a)
+        self.assertEqual({'_content': {
+            0: {
+                'b': ValuesNotEqual(2, 999, 1).explain(), # e[0] is paired with a[1], but the match is not perfect
+            },
+            1: MissingListItem({'a': 3, 'b': 4}, None, 1).explain(), # MissingListItem for e[1] instead of ValuesNotEqual
+            'extra_0': ExtraListItem(None, {'a': 999, 'b': 999}, 1).explain(), # ExtraListItem for a[0] instead of ValuesNotEqual
+        }}, result.diff)
+
+        # Only e[2] is paired because the threshold requires perfect match
+        # Other items should not be paired and throws MissingListItem and ExtraListItem instead of ValuesNotEqual
+        compare = Compare(self.config, weights={'_pairing_threshold': 1.0})
+        result = compare.calculate_score(e, a)
+        self.assertEqual({'_content': {
+            0: MissingListItem({'a': 1, 'b': 2}, None, 1).explain(), # MissingListItem for e[0] instead of ValuesNotEqual
+            1: MissingListItem({'a': 3, 'b': 4}, None, 1).explain(), # MissingListItem for e[1] instead of ValuesNotEqual
+            'extra_0': ExtraListItem(None, {'a': 999, 'b': 999}, 1).explain(), # ExtraListItem for a[0] instead of ValuesNotEqual
+            'extra_1': ExtraListItem(None, {'a': 1, 'b': 999}, 1).explain(), # ExtraListItem for a[1] instead of ValuesNotEqual
+        }}, result.diff)
+
 
 
 if __name__ == '__main__':
