@@ -14,6 +14,7 @@ from .errors import (
     ValuesNotEqual, MissingListItem, ExtraListItem,
 )
 from .ignore import Ignore
+from .utils import get_boolean, is_suppressed
 
 NO_DIFF: dict = {}
 NO_RULES: dict = {}
@@ -42,36 +43,22 @@ DEFAULT_CONFIG = {
 
 class Result:
 
-    __slots__ = ("_failed", "_failed_weighted", "_count", "_weighted_count", "_diff")
+    __slots__ = ("_failed", "_weighted_failed", "_count", "_weighted_count", "_diff")
 
-    def __init__(self, diff, count, weighted_count):
+    def __init__(self, diff, count, weighted_count, failed, weighted_failed):
         self._diff = diff
         self._count = count
         self._weighted_count = weighted_count
-        self._failed = self._count_failed(diff, False)
-        self._failed_weighted = self._count_failed(diff, True)
-
-    def _count_failed(self, d, weighted):
-        if self._is_problem(d):
-            if weighted and '_weight' in d:
-                return d['_weight']
-            else:
-                return 1
-        else:
-            return sum(self._count_failed(v, weighted) for v in d.values())
-
-    def _is_problem(self, d):
-        if isinstance(d, dict) and '_error' in d:
-            return True
-        return False
+        self._failed = failed
+        self._weighted_failed = weighted_failed
 
     @property
     def failed(self):
         return self._failed
 
     @property
-    def failed_weighted(self):
-        return self._failed_weighted
+    def weighted_failed(self):
+        return self._weighted_failed
 
     @property
     def count(self):
@@ -86,7 +73,7 @@ class Result:
         if self._weighted_count == 0:
             return 0
 
-        similarity = (self._weighted_count - self._failed_weighted) / self._weighted_count
+        similarity = (self._weighted_count - self._weighted_failed) / self._weighted_count
 
         # sometimes, similarity can be negative, so we need to return 0 in this case
         # for example, when there are extra items in the second list
@@ -122,16 +109,47 @@ class Compare:
         e = self.prepare(expected)
         a = self.prepare(actual)
         weight = self._get_root_weight()
-        diff = self._diff(e, a, weight, self._weights)
+        suppressed = is_suppressed(self._weights)
+        diff = self._diff(e, a, weight, self._weights, suppressed)
         self.report(diff)
         return diff
 
     def calculate_score(self, expected, actual):
         diff = self.check(expected, actual)
-        count = self._attributes_count(expected)
         weight = self._get_root_weight()
-        weighted_count = self._weighted_attributes_count(expected, weight, self._weights)
-        return Result(diff, count, weighted_count)
+        return self._create_result(diff, expected, weight, self._weights)
+
+    def _create_result(self, diff, expected, weight, weights):
+        filtered_diff = self._without_suppressed_errors(diff)
+        count = self._attributes_count(expected)
+        weighted_count = self._weighted_attributes_count(expected, weight, weights)
+        failed = self._count_failed(diff, False)
+        weighted_failed = self._count_failed(diff, True)
+        return Result(filtered_diff, count, weighted_count, failed, weighted_failed)
+
+    def _without_suppressed_errors(self, diff):
+        # Remove errors that are suppressed by setting `_suppress` in weights
+
+        if is_suppressed(diff): # When the whole dict is suppressed, return {}
+            return None
+
+        if isinstance(diff, dict):
+            result = {}
+            for k, v in diff.items():
+                if not is_suppressed(v):
+                    result[k] = self._without_suppressed_errors(v)
+            return self._without_empties(result)
+
+        return diff
+
+    def _count_failed(self, d, weighted):
+        if isinstance(d, dict) and '_error' in d:
+            if weighted and '_weight' in d:
+                return d['_weight']
+            else:
+                return 1
+        else:
+            return sum(self._count_failed(v, weighted) for v in d.values())
 
     def _get_root_weight(self):
         return self._weights['_weight'] if '_weight' in self._weights else 1
@@ -153,34 +171,29 @@ class Compare:
 
         return 1
 
-    def _get_boolean(self, config, key):
-        if isinstance(config, dict) and key in config:
-            return config[key] is True
-        return False
-
-    def _diff(self, e, a, weight, weights):
+    def _diff(self, e, a, weight, weights, suppressed):
+        suppressed = suppressed or is_suppressed(weights)
         t = type(e)
         if not isinstance(a, t):
-            return TypesNotEqual(e, a, weight).explain()
+            return TypesNotEqual(e, a, weight, suppressed).explain()
         if t is int:
-            return self._int_diff(e, a, weight)
+            return self._int_diff(e, a, weight, suppressed)
         if t is str:
-            return self._str_diff(e, a, weight)
+            return self._str_diff(e, a, weight, suppressed)
         if t is bool:
-            return self._bool_diff(e, a, weight)
+            return self._bool_diff(e, a, weight, suppressed)
         if t is float:
-            return self._float_diff(e, a, weight)
+            return self._float_diff(e, a, weight, suppressed)
         if t is dict:
-            return self._dict_diff(e, a, weight, weights)
+            return self._dict_diff(e, a, weight, weights, suppressed)
         if t is list:
-            return self._list_diff(e, a, weight, weights)
+            return self._list_diff(e, a, weight, weights, suppressed)
         return NO_DIFF
 
     def _calculate_similarity(self, e, a, weight, weights):
-        diff = self._diff(e, a, weight, weights)
-        count = self._attributes_count(e)
-        weighted_count = self._weighted_attributes_count(e, weight, weights)
-        return Result(diff, count, weighted_count).similarity
+        diff = self._diff(e, a, weight, weights, False)
+        result = self._create_result(diff, e, weight, weights)
+        return result.similarity
 
     def _attributes_count(self, o):
         return self._weighted_attributes_count(o, 1, {})
@@ -204,24 +217,24 @@ class Compare:
             return weight
 
     @classmethod
-    def _int_diff(cls, e, a, weight):
+    def _int_diff(cls, e, a, weight, suppressed):
         if a == e:
             return NO_DIFF
-        return ValuesNotEqual(e, a, weight).explain()
+        return ValuesNotEqual(e, a, weight, suppressed).explain()
 
     @classmethod
-    def _bool_diff(cls, e, a, weight):
+    def _bool_diff(cls, e, a, weight, suppressed):
         if a is e:
             return NO_DIFF
-        return ValuesNotEqual(e, a, weight).explain()
+        return ValuesNotEqual(e, a, weight, suppressed).explain()
 
     @classmethod
-    def _str_diff(cls, e, a, weight):
+    def _str_diff(cls, e, a, weight, suppressed):
         if a == e:
             return NO_DIFF
-        return ValuesNotEqual(e, a, weight).explain()
+        return ValuesNotEqual(e, a, weight, suppressed).explain()
 
-    def _float_diff(self, e, a, weight):
+    def _float_diff(self, e, a, weight, suppressed):
         if a == e:
             return NO_DIFF
         if self._can_rounded_float():
@@ -229,7 +242,7 @@ class Compare:
             e, a = round(e, p), round(a, p)
             if a == e:
                 return NO_DIFF
-        return ValuesNotEqual(e, a, weight).explain()
+        return ValuesNotEqual(e, a, weight, suppressed).explain()
 
     def _can_rounded_float(self):
         p = self._float_precision()
@@ -249,46 +262,48 @@ class Compare:
 
         return {}
 
-    def _dict_diff(self, e, a, dict_weight, weights):
+    def _dict_diff(self, e, a, dict_weight, weights, suppressed):
         missing_item_weight = self._get_weight(weights, '_missing')
-        boost_missing_item_weight = self._get_boolean(weights, '_boost_missing')
+        boost_missing_item_weight = get_boolean(weights, '_boost_missing')
         extra_item_weight = self._get_weight(weights, '_extra')
-        boost_extra_item_weight = self._get_boolean(weights, '_boost_extra')
+        boost_extra_item_weight = get_boolean(weights, '_boost_extra')
 
         d = {}
 
         for k in e:
             k_attr_weight = self._get_weight(weights, k)
             nested_weights = self._get_nested_weights(weights, k)
+            k_suppressed = suppressed or is_suppressed(nested_weights)
             if k not in a:
                 k_boost_weight = self._get_boost_weight(e[k], nested_weights) if boost_missing_item_weight else 1
                 k_weight = dict_weight * k_attr_weight * missing_item_weight * k_boost_weight
-                d[k] = KeyNotExist(k, None, k_weight).explain()
+                d[k] = KeyNotExist(k, None, k_weight, suppressed).explain()
             else:
                 k_weight = dict_weight * k_attr_weight
-                d[k] = self._diff(e[k], a[k], k_weight, nested_weights)
+                d[k] = self._diff(e[k], a[k], k_weight, nested_weights, suppressed)
 
         for k in a:
             k_attr_weight = self._get_weight(weights, k)
             nested_weights = self._get_nested_weights(weights, k)
+            k_suppressed = suppressed or is_suppressed(nested_weights)
             if k not in e:
                 k_boost_weight = self._get_boost_weight(a[k], nested_weights) if boost_extra_item_weight else 1
                 k_weight = dict_weight * k_attr_weight * extra_item_weight * k_boost_weight
-                d[k] = UnexpectedKey(None, k, k_weight).explain()
+                d[k] = UnexpectedKey(None, k, k_weight, suppressed).explain()
             else:
                 k_weight = dict_weight * k_attr_weight
-                d[k] = self._diff(e[k], a[k], k_weight, nested_weights)
+                d[k] = self._diff(e[k], a[k], k_weight, nested_weights, suppressed)
 
         return self._without_empties(d)
 
-    def _list_diff(self, e, a, weight, weights):
+    def _list_diff(self, e, a, weight, weights, suppressed):
         d = {}
 
         if self._need_compare_length():
             length_weight = self._get_weight(weights, '_length')
-            d['_length'] = self._list_len_diff(e, a, weight * length_weight)
+            d['_length'] = self._list_len_diff(e, a, weight * length_weight, suppressed)
 
-        d['_content'] = self._list_content_diff_new(e, a, weight, weights)
+        d['_content'] = self._list_content_diff_new(e, a, weight, weights, suppressed)
 
         return self._without_empties(d)
 
@@ -301,17 +316,16 @@ class Compare:
         return self._config.get(path) is True
 
     def _get_boost_weight(self, item, weights):
-        diff = self._diff(item, {}, 1, weights)
-        count = self._attributes_count(item)
-        weighted_count = self._weighted_attributes_count(item, 1, weights)
-        return Result(diff, count, weighted_count).failed_weighted
+        diff = self._diff(item, {}, 1, weights, False)
+        result = self._create_result(diff, item, 1, weights)
+        return result.weighted_count
 
-    def _list_content_diff_new(self, e, a, list_weight, weights):
+    def _list_content_diff_new(self, e, a, list_weight, weights, suppressed):
         content_weights = self._get_nested_weights(weights, '_content')
         missing_item_weight = self._get_weight(weights, '_missing')
-        boost_missing_item_weight = self._get_boolean(weights, '_boost_missing')
+        boost_missing_item_weight = get_boolean(weights, '_boost_missing')
         extra_item_weight = self._get_weight(weights, '_extra')
-        boost_extra_item_weight = self._get_boolean(weights, '_boost_extra')
+        boost_extra_item_weight = get_boolean(weights, '_boost_extra')
         pairing_threshold = weights['_pairing_threshold'] if '_pairing_threshold' in weights else 0.0
 
         result = {}
@@ -340,7 +354,7 @@ class Compare:
         #     print(f"A{v+1} -> B{w+1} (score: {score_matrix[v, w]})")
 
         # Filter out pairs with a score below the threshold
-        filtered_pairs = [(i, j) for i, j in pairs if score_matrix[i, j] >= pairing_threshold]
+        filtered_pairs = [(int(i), int(j)) for i, j in pairs if score_matrix[i, j] >= pairing_threshold] # also converts numpy.int64 to int
         paired_e_items = [i for i, j in filtered_pairs]
         paired_a_items = [j for i, j in filtered_pairs]
 
@@ -350,17 +364,17 @@ class Compare:
             if i not in paired_e_items:
                 i_boost_weight = self._get_boost_weight(e[i], content_weights) if boost_missing_item_weight else 1
                 i_weight = list_weight * missing_item_weight * i_boost_weight
-                result[i] = MissingListItem(e[i], None, i_weight).explain()
+                result[i] = MissingListItem(e[i], None, i_weight, suppressed).explain()
 
         for j in range(len(a)):
             if j not in paired_a_items:
                 j_boost_weight = self._get_boost_weight(a[j], content_weights) if boost_extra_item_weight else 1
                 j_weight = list_weight * extra_item_weight * j_boost_weight
-                result['extra_' + str(j)] = ExtraListItem(None, a[j], j_weight).explain()
+                result['extra_' + str(j)] = ExtraListItem(None, a[j], j_weight, suppressed).explain()
 
         # Now we need to check the elements that were matched
         for i, j in filtered_pairs:
-            diff = self._diff(e[i], a[j], list_weight, content_weights)
+            diff = self._diff(e[i], a[j], list_weight, content_weights, suppressed)
             if diff != NO_DIFF:
                 result[i] = diff
 
@@ -409,7 +423,7 @@ class Compare:
                     break
         return d
 
-    def _list_len_diff(self, e, a, weight):
+    def _list_len_diff(self, e, a, weight, suppressed):
         e, a = len(e), len(a)
 
         if e == a:
@@ -421,7 +435,7 @@ class Compare:
         else:
             list_weight = weight
 
-        return LengthsNotEqual(e, a, list_weight).explain()
+        return LengthsNotEqual(e, a, list_weight, suppressed).explain()
 
     @classmethod
     def _without_empties(cls, d):
