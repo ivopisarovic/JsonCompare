@@ -6,13 +6,15 @@ class Error(ABC):
     received = None
     type = None  # New attribute to indicate the error type
     weight = 1
+    suppress = False
 
     template = 'Expected: <{e}>, received: <{r}>'
 
-    def __init__(self, expected, received, weight=1):
+    def __init__(self, expected, received, weight=1, suppress=False):
         self.expected = expected
         self.received = received
         self.weight = weight
+        self.suppress = suppress
         self.type = self.__class__.__name__  # Set the type to the subclass name
 
     @property
@@ -27,16 +29,17 @@ class Error(ABC):
             '_received': self.received,
             '_error': self.type,
             '_weight': self.weight,
+            '_suppress': self.suppress
         }
 
 
 class TypesNotEqual(Error):
     template = 'Types not equal. Expected: <{e}>, received: <{r}>'
 
-    def __init__(self, e, a, weight=1):
+    def __init__(self, e, a, weight=1, suppress=False):
         e = type(e).__name__
         a = type(a).__name__
-        super().__init__(e, a, weight)
+        super().__init__(e, a, weight, suppress)
 
 
 class ValuesNotEqual(Error):

@@ -338,7 +338,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(13.6, result.failed_weighted)
+        self.assertEqual(13.6, result.weighted_failed)
         self.assertEqual(6, result.count)
         self.assertEqual(17, result.weighted_count)
         self.assertAlmostEqual(1 - (13.6 / 17), result.similarity)
@@ -380,7 +380,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(28, result.failed_weighted)
+        self.assertEqual(28, result.weighted_failed)
         self.assertEqual(2, result.count)
         self.assertEqual(12 + 16, result.weighted_count)
         self.assertAlmostEqual(1 - (28 / 28), result.similarity)
@@ -400,7 +400,7 @@ class CompareTestCase(unittest.TestCase):
             'list': { '_weight': 2 }
         })
         result = compare.calculate_score(e, a)
-        self.assertEqual(5, result.failed_weighted)
+        self.assertEqual(5, result.weighted_failed)
         self.assertEqual(3, result.count)
         self.assertEqual(3 + 2 + 2, result.weighted_count)
         self.assertAlmostEqual(1 - (5 / 7), result.similarity)
@@ -410,7 +410,7 @@ class CompareTestCase(unittest.TestCase):
             'list': 2
         })
         result = compare.calculate_score(e, a)
-        self.assertEqual(5, result.failed_weighted)
+        self.assertEqual(5, result.weighted_failed)
         self.assertEqual(3, result.count)
         self.assertEqual(3 + 2 + 2, result.weighted_count)
         self.assertAlmostEqual(1 - (5 / 7), result.similarity)
@@ -455,7 +455,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(13.2, result.failed_weighted)
+        self.assertEqual(13.2, result.weighted_failed)
         self.assertEqual(4, result.count)
         self.assertEqual(8 + 4 + 8 + 4, result.weighted_count)
         self.assertAlmostEqual(1 - (13.2 / 24), result.similarity)
@@ -488,7 +488,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(66, result.failed_weighted)
+        self.assertEqual(66, result.weighted_failed)
         self.assertAlmostEqual(0, result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
         # Compare a and e (vice versa)
@@ -505,7 +505,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(60, result.failed_weighted)
+        self.assertEqual(60, result.weighted_failed)
         self.assertAlmostEqual(0, result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
     def test_dict_missing_and_extra(self):
@@ -528,7 +528,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(90 + 48, result.failed_weighted)
+        self.assertEqual(90 + 48, result.weighted_failed)
         self.assertAlmostEqual(0, result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
     def test_list_missing_and_extra_with_boost(self):
@@ -559,7 +559,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(4 * 1 * 5 + 5 * 3 * 13, result.failed_weighted)
+        self.assertEqual(4 * 1 * 5 + 5 * 3 * 13, result.weighted_failed)
         self.assertAlmostEqual(0, result.similarity) # the similarity is negative due to the boost, so it is 0 at the end
 
         # Compare a and e (vice versa)
@@ -573,7 +573,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(4 * 1 * 5 + 5 * 2 * 13, result.failed_weighted)
+        self.assertEqual(4 * 1 * 5 + 5 * 2 * 13, result.weighted_failed)
         self.assertAlmostEqual(0, result.similarity) # the similarity is negative due to the boost, so it is 0 at the end
 
     def test_dict_missing_and_extra_with_boost(self):
@@ -601,7 +601,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(360 + 48, result.failed_weighted)
+        self.assertEqual(360 + 48, result.weighted_failed)
         self.assertAlmostEqual(0, result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
     def test_list_pairing_with_weights(self):
@@ -637,7 +637,7 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(5, result.failed_weighted)
+        self.assertEqual(5, result.weighted_failed)
         self.assertAlmostEqual(1 + 1 + 10, result.weighted_count)
         self.assertAlmostEqual(1 - (5 / 12), result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
@@ -699,18 +699,19 @@ class CompareTestCase(unittest.TestCase):
             },
             result.diff
         )
-        self.assertEqual(13, result.failed_weighted)
+        self.assertEqual(13, result.weighted_failed)
         self.assertAlmostEqual(1 + 4 * 10, result.weighted_count)
         self.assertAlmostEqual(1 - (13 / 41), result.similarity) # The similarity is zero because the weighted number of errors is greater than the weighted count of attributes.
 
 
     def test_list_pairing_threshold(self):
+        # e[2] is the same as a[2] with similarity 1.0
         # e[0] is similar to a[1] with similarity 0.5
         # e[1] is not similar to a[0], similarity is 0.0
-        # e[2] is same as a[2] with similarity 1.0
         e = [{'a': 1, 'b': 2}, {'a': 3, 'b': 4}, {'a': 5, 'b': 6}]
         a = [{'a': 999, 'b': 999}, {'a': 1, 'b': 999}, {'a': 5, 'b': 6}]
 
+        # 1. THRESHOLD 0.0
         # All should be paired because similarities of both pairs are above the threshold
         compare = Compare(self.config, weights={'_pairing_threshold': 0})
         result = compare.calculate_score(e, a)
@@ -723,8 +724,9 @@ class CompareTestCase(unittest.TestCase):
                 'b': ValuesNotEqual(4, 999, 1).explain(),
             }
         }}, result.diff)
-        self.assertEqual(3, result.failed_weighted)
+        self.assertEqual(3, result.weighted_failed)
 
+        # 2. THRESHOLD 0.4
         # Items e[0] and e[2] are paired, but e[1] is not paired due to the threshold set to 0.4
         # Item e[1] should not be paired and throws MissingListItem and ExtraListItem instead of ValuesNotEqual
         compare = Compare(self.config, weights={'_pairing_threshold': 0.4})
@@ -737,8 +739,9 @@ class CompareTestCase(unittest.TestCase):
             'extra_0': ExtraListItem(None, {'a': 999, 'b': 999}, 1).explain(), # ExtraListItem for a[0] instead of ValuesNotEqual
         }}, result.diff)
 
+        # 3. THRESHOLD 1.0
         # Only e[2] is paired because the threshold requires perfect match
-        # Other items should not be paired and throws MissingListItem and ExtraListItem instead of ValuesNotEqual
+        # Other items should not be paired and throw MissingListItem and ExtraListItem instead of ValuesNotEqual
         compare = Compare(self.config, weights={'_pairing_threshold': 1.0})
         result = compare.calculate_score(e, a)
         self.assertEqual({'_content': {
@@ -748,6 +751,124 @@ class CompareTestCase(unittest.TestCase):
             'extra_1': ExtraListItem(None, {'a': 1, 'b': 999}, 1).explain(), # ExtraListItem for a[1] instead of ValuesNotEqual
         }}, result.diff)
 
+    def test_suppressing_errors_different_types(self):
+        e = {
+            'int': 1,
+            'str': 'hola',
+            'bool': True,
+            'float': 1.23,
+            'list': [1, 2],
+            'dict': {'a': 1, 'b': 2}
+        }
+        a = {
+            'int': 2,
+            'str': 'hi',
+            'bool': False,
+            'float': 2.34,
+            'list': [3, 4],
+            'dict': {'a': 9, 'b': 9}
+        }
+
+        compare = Compare(self.config, weights={
+            'int': { '_suppress': True },
+            'str': {'_suppress': True },
+            'bool': {'_suppress': True },
+            'float': {'_suppress': True },
+            'list': {'_suppress': True },
+            'dict': {'_suppress': True },
+        })
+
+        result = compare.calculate_score(e, a)
+        self.assertEqual(NO_DIFF, result.diff)
+        self.assertEqual(8.0, result.weighted_failed) # only a is equal, hence this is weighted_count - 1
+        self.assertAlmostEqual(8.0, result.weighted_count) # do not forget that d has weight 3!
+        self.assertAlmostEqual(0.0, result.similarity)
+
+    def test_suppressing_errors_with_weights(self):
+        e = {
+            'int': 1,
+            'dict': {
+                'a': 1
+            }
+        }
+        a = {
+            'int': 999,
+            'dict': {
+                'a': 999
+            }
+        }
+
+        compare = Compare(self.config, weights={
+            'int': {
+                '_suppress': True,
+                '_weight': 2
+            },
+            'dict': {
+                '_weight': 3,
+                'a': {
+                    '_suppress': True,
+                    '_weight': 4
+                }
+            }
+        })
+
+        result = compare.calculate_score(e, a)
+        self.assertEqual(NO_DIFF, result.diff)
+        self.assertEqual(2 + 12, result.weighted_failed) # only a is equal, hence this is weighted_count - 1
+        self.assertAlmostEqual(2 + 12, result.weighted_count) # do not forget that d has weight 3!
+        self.assertAlmostEqual(0.0, result.similarity)
+
+    def test_suppressing_errors_for_nested_objects(self):
+        e = {
+            'list1': [{'a': 1, 'b': 1}],
+            'list2': [{'a': 1, 'b': 1}],
+            'dict1': {'a': 1, 'b': 1},
+            'dict2': {'a': 1, 'b': 1},
+        }
+        a = {
+            'list1': [{'a': 999, 'b': 999}], # the list items are different but the whole list is suppressed
+            'list2': [{'a': 999, 'b': 999}], # the list items are different only a is suppressed, b throws error
+            'dict1': {'a': 999, 'b': 999}, # both attributes are different but the whole dict is suppressed
+            'dict2': {'a': 999, 'b': 999}, # both attributes are different only a is suppressed, b throws error
+        }
+
+        compare = Compare(self.config, weights={
+            'list1': {
+                '_suppress': True
+            },
+            'list2': {
+                '_content': {
+                    'a': {
+                        '_suppress': True
+                    }
+                }
+            },
+            'dict1': {
+                '_suppress': True
+            },
+            'dict2': {
+                'a': {
+                    '_suppress': True
+                }
+            }
+        })
+
+        result = compare.calculate_score(e, a)
+        self.assertEqual({
+            'list2': {
+                '_content': {
+                    0: {
+                        'b': ValuesNotEqual(1, 999, 1).explain()
+                    }
+                }
+            },
+            'dict2': {
+                'b': ValuesNotEqual(1, 999, 1).explain()
+            }
+        }, result.diff)
+        self.assertEqual(8.0, result.weighted_failed) # only a is equal, hence this is weighted_count - 1
+        self.assertAlmostEqual(8.0, result.weighted_count) # do not forget that d has weight 3!
+        self.assertAlmostEqual(0.0, result.similarity)
 
 
 if __name__ == '__main__':
