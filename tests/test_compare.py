@@ -1,5 +1,4 @@
 import unittest
-import json
 
 from jsoncomparison import (
     NO_DIFF,
@@ -7,7 +6,6 @@ from jsoncomparison import (
     KeyNotExist,
     LengthsNotEqual,
     TypesNotEqual,
-    ValueNotFound,
     ValuesNotEqual,
 )
 from jsoncomparison.errors import UnexpectedKey, MissingListItem, ExtraListItem
@@ -869,6 +867,29 @@ class CompareTestCase(unittest.TestCase):
         self.assertEqual(8.0, result.weighted_failed) # only a is equal, hence this is weighted_count - 1
         self.assertAlmostEqual(8.0, result.weighted_count) # do not forget that d has weight 3!
         self.assertAlmostEqual(0.0, result.similarity)
+
+    def test_empty_lists(self):
+        expected = []
+        actual = [
+            {'a': "yyy"},
+        ]
+
+        diff = Compare().check(expected, expected)
+        self.assertEqual(
+            NO_DIFF,
+            diff
+        )
+
+        diff = Compare().check(expected, actual)
+        self.assertEqual(
+            {
+                '_length': LengthsNotEqual(0, 1, 1).explain(), # Warning! Length error weight is multiplied by the difference in lists lengths and by _weight of the whole list!
+                '_content': {
+                    'extra_0': ExtraListItem(None, {'a': 'yyy'}, 1).explain(),
+                }
+            },
+            diff
+        )
 
 
 if __name__ == '__main__':

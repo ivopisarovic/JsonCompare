@@ -10,7 +10,6 @@ from .errors import (
     LengthsNotEqual,
     TypesNotEqual,
     UnexpectedKey,
-    ValueNotFound,
     ValuesNotEqual, MissingListItem, ExtraListItem,
 )
 from .ignore import Ignore
@@ -330,36 +329,43 @@ class Compare:
 
         result = {}
 
-        # Prepare the score matrix for matrix in size len(e) x len(a)
-        score_matrix = np.zeros((len(e), len(a)))
+        if len(e) > 0 and len(a) > 0:
+            # Prepare the score matrix for matrix in size len(e) x len(a)
+            score_matrix = np.zeros((len(e), len(a)))
 
-        # Calculate score for each pair of elements
-        for i, v in enumerate(e):
-            for j, w in enumerate(a):
-                if type(v) is type(w):
-                    similarity = self._calculate_similarity(v, w, list_weight, content_weights)
-                    score_matrix[i, j] = similarity
+            # Calculate score for each pair of elements
+            for i, v in enumerate(e):
+                for j, w in enumerate(a):
+                    if type(v) is type(w):
+                        similarity = self._calculate_similarity(v, w, list_weight, content_weights)
+                        score_matrix[i, j] = similarity
 
-        # Hungarian algorithm optimizes the cost, so we need to convert scores to costs.
-        # The cost is calculated as the maximum score minus the score.
-        cost_matrix = score_matrix.max() - score_matrix
+            # Hungarian algorithm optimizes the cost, so we need to convert scores to costs.
+            # The cost is calculated as the maximum score minus the score.
+            cost_matrix = score_matrix.max() - score_matrix
 
-        # Using Hungarian algorithm (solving the minimization problem)
-        row_ind, col_ind = linear_sum_assignment(cost_matrix)
-        pairs = list(zip(row_ind, col_ind))
+            # Using Hungarian algorithm (solving the minimization problem)
+            row_ind, col_ind = linear_sum_assignment(cost_matrix)
+            pairs = list(zip(row_ind, col_ind))
 
-        # Pairing (debug print)
-        # print("Pairing:")
-        # for v, w in zip(row_ind, col_ind):
-        #     print(f"A{v+1} -> B{w+1} (score: {score_matrix[v, w]})")
+            # Pairing (debug print)
+            # print("Pairing:")
+            # for v, w in zip(row_ind, col_ind):
+            #     print(f"A{v+1} -> B{w+1} (score: {score_matrix[v, w]})")
 
-        # Filter out pairs with a score below the threshold
-        filtered_pairs = [(int(i), int(j)) for i, j in pairs if score_matrix[i, j] >= pairing_threshold] # also converts numpy.int64 to int
-        paired_e_items = [i for i, j in filtered_pairs]
-        paired_a_items = [j for i, j in filtered_pairs]
+            # Filter out pairs with a score below the threshold
+            filtered_pairs = [(int(i), int(j)) for i, j in pairs if score_matrix[i, j] >= pairing_threshold] # also converts numpy.int64 to int
+
+        else:
+            # If one of the lists is empty, we cannot pair anything
+            # This condition is necessary to avoid errors in the case of empty lists
+            filtered_pairs = []
 
         # After pairing, we need to find the elements that were not matched
         # and add them to the result
+        paired_e_items = [i for i, j in filtered_pairs]
+        paired_a_items = [j for i, j in filtered_pairs]
+
         for i in range(len(e)):
             if i not in paired_e_items:
                 i_boost_weight = self._get_boost_weight(e[i], content_weights) if boost_missing_item_weight else 1
